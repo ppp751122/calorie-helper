@@ -1,0 +1,3 @@
+# Firebase 專案 ID 本來就公開寫在 config.js，不是機密，告訴 Netlify 的機密掃描不用擋它
+[build.environment]
+  SECRETS_SCAN_OMIT_KEYS = "FIREBASE_PROJECT_ID"
