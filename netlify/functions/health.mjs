@@ -9,7 +9,7 @@ const num = v => { const n = parseFloat(String(v ?? '').replace(/,/g, '').replac
 const twDate = () => new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
 
 export default async (req) => {
-  const store = getStore('health');
+  const store = getStore({ name: 'health', consistency: 'strong' });
   const url = new URL(req.url);
   if (req.method === 'GET') {
     const token = url.searchParams.get('token');
