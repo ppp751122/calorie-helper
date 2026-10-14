@@ -43,6 +43,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
 .btn.fuel{background:var(--fuel);color:#1B1B10}
 .btn:disabled{opacity:.5}
+.hub{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.hub-h{font-size:13px;color:var(--muted);margin:14px 0 6px}
+.hub-h:first-of-type{margin-top:4px}
 .btn .ic{width:20px;height:20px;vertical-align:-4px;margin-right:6px}
 .ic{width:18px;height:18px;flex:none}
 .row{display:flex;gap:10px;align-items:center}
@@ -334,7 +337,7 @@ nav.tabs .cam svg{width:28px;height:28px}
 <nav class="tabs" aria-label="主選單">
   <button data-tab="today" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>今天</button>
   <button data-tab="cal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>日曆</button>
-  <button class="cam" id="camBtn" aria-label="記錄一餐"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
+  <button class="cam" id="camBtn" aria-label="新增紀錄"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
   <button data-tab="comp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H4a3 3 0 0 0 4 4M16 6h4a3 3 0 0 1-4 4M12 13v4M8 21h8M10 17h4v4h-4z"/></svg>競賽</button>
   <button data-tab="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg>我的</button>
 </nav>
@@ -685,7 +688,7 @@ async function cloudInit(){
     else if(local.profile){await db.doc(`data/users/${uid}/profile`).set({profile:local.profile})}
     const days=await db.doc(`data/users/${uid}/profile`).collection('days').orderBy('date','desc').limit(14).get();
     days.docs.forEach(x=>{if(x.exists){const v=clone(x.data());local.days[v.date]={date:v.date,meals:v.meals||[],burn:v.burn||0}}});
-    saveLocal(); render(); photoCloudLoad(); bodyCloudLoad();
+    saveLocal(); render(); photoCloudLoad(); bodyCloudLoad().then(healthPull);
     }catch(e){console.warn('cloud',e)}
   });
 }
@@ -712,7 +715,9 @@ const IC={
  search:'<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>',
  pen:'<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/>',
  doc:'<path d="M7 3h7l4 4v14H7z"/><path d="M10 12h5M10 16h5"/>',
- chev:'<path d="M9 6l6 6-6 6"/>'};
+ chev:'<path d="M9 6l6 6-6 6"/>',
+ run:'<circle cx="14" cy="4.5" r="1.8"/><path d="M9 20l3-6 3 3v4M8 11l3-3 3 1 2 3h3M12 14l-2-3"/>',
+ heart:'<path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.5-7 10-7 10z"/>'};
 const ico=n=>`<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n]}</svg>`;
 // ---------- calc ----------
 const ACT=[{k:1.2,t:'幾乎不動',d:'坐辦公室、少走路'},{k:1.375,t:'輕度',d:'每週運動 1–3 天'},{k:1.55,t:'中度',d:'每週運動 3–5 天'},{k:1.725,t:'高度',d:'每週運動 6–7 天'}];
@@ -746,7 +751,7 @@ function render(){
   if(tab==='comp'){app.innerHTML=compView();bindComp()}
   if(tab==='advice'){app.innerHTML=adviceView();bindAdvice()}
   if(tab==='body'){app.innerHTML=bodyView();bindBody()}
-  if(tab==='settings'){app.innerHTML=setupView(false)+acctSection();bindSetup();bindLib();bindPhoto();bindAcct()}
+  if(tab==='settings'){app.innerHTML=setupView(false)+healthSection()+acctSection();bindSetup();bindLib();bindPhoto();bindHealth();bindAcct()}
   if(tab==='today')bindToday();
 }
 
@@ -899,7 +904,32 @@ function closeSheet(){if(typeof stopScan==='function')stopScan();wrap.classList.
 wrap.addEventListener('click',e=>{if(e.target===wrap)closeSheet()});
 
 let pendingDate=null;
-document.getElementById('camBtn').onclick=()=>{if(!local.profile){toast('先完成基本資料');return}openChooser(todayKey())};
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&db&&uid&&(!local.healthAt||Date.now()-local.healthAt>10*60e3))healthPull()});
+document.getElementById('camBtn').onclick=()=>{if(!local.profile){toast('先完成基本資料');return}openHub()};
+function openHub(){
+  openSheet(`<h2>要記錄什麼？</h2>
+    <p class="hub-h">這一餐</p>
+    <div class="hub">
+      <button class="btn fuel" id="hCam">${ico('cam')}拍照</button>
+      <button class="btn ghost" id="hLib">${ico('img')}相簿</button>
+      <button class="btn ghost" id="hBar">${ico('bar')}掃條碼</button>
+      <button class="btn ghost" id="hTxt">${ico('key')}打字</button></div>
+    <p class="hub-h">身體</p>
+    <div class="hub">
+      <button class="btn ghost" id="hIb">${ico('doc')}拍 InBody</button>
+      <button class="btn ghost" id="hW">${ico('scale')}體重</button></div>
+    <p class="hub-h">運動</p>
+    <div class="hub"><button class="btn ghost" id="hBurn" style="grid-column:1/-1">${ico('run')}今天的運動消耗</button></div>`);
+  const $=id=>document.getElementById(id), t=todayKey();
+  pendingDate=t;
+  $('hCam').onclick=()=>{closeSheet();$('photo').click()};
+  $('hLib').onclick=()=>{closeSheet();$('photoLib').click()};
+  $('hBar').onclick=()=>openScanner(t);
+  $('hTxt').onclick=()=>openCapture(null,t);
+  $('hIb').onclick=()=>{closeSheet();$('inbodyFile').click()};
+  $('hW').onclick=()=>openBodyForm({date:t,src:'manual'});
+  $('hBurn').onclick=()=>openBurn(t);
+}
 function openChooser(date){
   pendingDate=date;
   openSheet(`<h2>${date===todayKey()?'記錄這一餐':'補記 '+date.slice(5).replace('-','/')+' 的一餐'}</h2><div class="pick">
@@ -930,7 +960,8 @@ let draft=null, pendingBarcode=null;
 function openCapture(blob,date){
   draft={type:mealType(),items:[],blob,date:date||todayKey(),barcode:blob?pendingBarcode:null};pendingBarcode=null;
   if(blob)makeThumb(blob).then(t=>{if(draft&&draft.blob===blob)draft.thumb=t});
-  openSheet(`<h2>${blob?'辨識這一餐':'記錄這一餐'}</h2>
+  openSheet(`<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px"><h2 style="margin:0">${blob?'辨識這一餐':'記錄這一餐'}</h2>
+   <input type="date" id="capDate" class="ti" style="flex:none;width:auto;padding:6px 10px" value="${draft.date}" max="${todayKey()}" aria-label="日期"></div>
    ${blob?`<img class="preview" src="${URL.createObjectURL(blob)}" alt="你拍的餐點">`:''}
    <label class="f">${blob?'補充說明（辨識前、辨識後都可以寫）':'吃了什麼？（估算後也可以再補充）'}<textarea id="hint" rows="2" placeholder="${blob?'例如：飯只吃一半、飲料是無糖、那是雞腿不是排骨':'例如：雞腿便當、中杯無糖拿鐵'}"></textarea></label>
    <div class="row"><button class="btn fuel" id="goAI" ${sample?'':'hidden'}>${blob?'開始辨識':'估算熱量'}</button>
@@ -939,6 +970,7 @@ function openCapture(blob,date){
    <div id="tfBox"></div>
    <div id="capOut"></div>`);
   document.getElementById('goTfnd').onclick=openTfndSearch;
+  document.getElementById('capDate').onchange=e=>{const v=e.target.value;if(!v||v>todayKey()){e.target.value=draft.date;toast('不能選未來的日期');return}draft.date=v;if(v!==todayKey())toast('會記在 '+v.slice(5).replace('-','/'))};
   document.getElementById('goAI').onclick=runAI;
   document.getElementById('goManual').onclick=()=>{const h=draft.items.length?'':document.getElementById('hint').value.trim();const it={name:h,portion:'',kcal:0,protein_g:0,carbs_g:0,fat_g:0,manual:true};if(findFood(h)){applyLib(it,null);it.manual=false}draft.items.push(it);showItems(draft.note||'')};
 }
@@ -975,7 +1007,7 @@ ${hint?'使用者補充說明（優先採信）：'+hint:''}
 const SRC={tfnd:['🏛️','食藥署'],off:['🔖','條碼資料庫'],lib:['📦','商品庫'],label:['🏷️','營養標示'],brand:['🏪','品牌公布值'],est:['🤖','估算']};
 function showItems(note){
   const out=document.getElementById('capOut');
-  const g=document.getElementById('goAI'); if(g){g.disabled=false;g.className='btn ghost';g.textContent='依補充說明重新辨識'}
+  const g=document.getElementById('goAI'); if(g){g.disabled=false;g.className='btn ghost';g.textContent='重新辨識'}
   const gm=document.getElementById('goManual'); if(gm)gm.textContent='＋ 新增項目';
   const tot=()=>draft.items.reduce((a,i)=>a+(+i.kcal||0),0);
   const hasEst=draft.items.some(i=>i.src==='est'||i.src==='brand');
@@ -1117,11 +1149,8 @@ function openBurn(k){
   openSheet(`<h2>運動消耗　<span class="muted">${k.slice(5).replace('-','/')}</span></h2>
    <p class="muted">填入的運動消耗會加到當天可以吃的額度。</p>
    <div class="row"><input class="ti" id="burnIn" type="number" inputmode="numeric" value="${d.burn||''}" placeholder="大卡，例如 320"><button class="btn ghost" id="burnPaste" style="width:auto">貼上</button></div>
-   <details class="howto"><summary>從 iPhone 健康 App 帶入</summary>
-   <p>網頁 App 沒辦法直接讀健康資料，但可以用「捷徑」一鍵取得數字再貼上：</p>
-   <ol><li>打開「捷徑」App，新增捷徑</li><li>加入動作「尋找健康樣本」：類型選「活動能量」，條件「開始日期 是 今天」</li>
-   <li>加入動作「計算統計資料」：選「總和」</li><li>加入動作「拷貝到剪貼板」</li><li>（可選）加入「打開 URL」，網址貼這個 App 的連結</li></ol>
-   <p>之後按一下捷徑，回到這裡按「貼上」就好。也可以把捷徑放到主畫面或設成每晚自動執行。</p></details>
+   ${d.burnSrc==='health'?'<p class="muted">這個數字是 Apple 健康自動同步的。</p>':''}
+   <p class="muted">${healthToken()?'已開啟 Apple 健康自動同步，每天會自動帶入。':'想自動帶入？到「我的 → Apple 健康自動同步」設定一次就好。'}</p>
    <div class="row" style="margin-top:14px"><button class="btn ghost" id="burnClear">清除</button><button class="btn" id="burnSave">儲存</button></div>`);
   const $=id=>document.getElementById(id);
   $('burnPaste').onclick=async()=>{try{const t=await navigator.clipboard.readText();const n=parseFloat(String(t).replace(/[^\d.]/g,''));if(n>=0){$('burnIn').value=Math.round(n);toast('已貼上 '+Math.round(n)+' 大卡')}else toast('剪貼簿裡沒有數字')}catch(e){$('burnIn').focus();toast('請長按輸入框選「貼上」')}};
@@ -1133,7 +1162,7 @@ function openBurn(k){
 // ---------- 餐點清單 / 編輯 ----------
 function mealsList(k){
   const d=local.days[k]; const ms=d?.meals||[];
-  if(!ms.length)return `<p class="muted">${k===todayKey()?'還沒有記錄。按下方黃色按鈕記錄第一餐。':'這天沒有記錄。'}</p>`;
+  if(!ms.length)return `<p class="muted">${k===todayKey()?'還沒有記錄。按下方黃色 ＋ 記錄第一餐。':'這天沒有記錄。'}</p>`;
   return ms.map((m,i)=>{const kc=m.items.reduce((a,x)=>a+(+x.kcal||0),0);
     return `<div class="meal">${m.thumb?`<button class="mthumb" data-thumb="${k}|${i}" aria-label="看這餐的照片"><img src="${m.thumb}" alt=""></button>`:''}<div style="flex:1;min-width:0"><div class="t">${esc(m.type)} <span class="muted">${esc(m.time)}</span></div>
       <div class="d">${m.items.map(x=>esc(x.name)+' '+Math.round(+x.kcal||0)).join('、')}</div>${m.comment?`<div class="cm ${m.mode||''}">「${esc(m.comment)}」</div>`:''}</div>
@@ -1404,6 +1433,61 @@ function bindAcct(){const $=id=>document.getElementById(id);
 }
 
 
+
+// ---------- Apple 健康自動同步（捷徑 → /api/health → App）----------
+function healthToken(){return local.profile&&local.profile.healthToken||''}
+async function ensureHealthToken(){
+  if(healthToken())return healthToken();
+  const a=new Uint8Array(20);crypto.getRandomValues(a);const t=[...a].map(x=>x.toString(36).padStart(2,'0')).join('').slice(0,32);
+  await saveProfile(Object.assign({},local.profile,{healthToken:t}),true);return t;
+}
+async function healthPull(){
+  const t=healthToken();if(!t)return;
+  try{
+    const r=await fetch('/api/health?token='+t+'&since='+addDays(todayKey(),-45));const d=await r.json();
+    let nb=0,nw=0;const touched=new Set();
+    for(const e of (d.entries||[])){
+      if(e.burn!=null){const dy=day(e.date);if(+dy.burn!==+e.burn){dy.burn=e.burn;dy.burnSrc='health';touched.add(e.date);nb++}}
+      if(e.weight!=null){const ex=bodyList().find(x=>x.date===e.date&&x.src==='health');
+        if(!ex||Math.abs(ex.w-e.weight)>.01){await saveBody(Object.assign({},ex||{},{date:e.date,src:'health',w:e.weight,t:'07:00'}),true);nw++}}
+    }
+    for(const k of touched)await saveDay(k);
+    local.healthAt=Date.now();saveLocal();
+    if(nb||nw){render();toast(`已從 Apple 健康同步${nb?' '+nb+' 天運動消耗':''}${nw?(nb?'、':' ')+nw+' 筆體重':''}`)}
+  }catch(e){console.warn('health',e)}
+}
+function healthSection(){
+  const t=healthToken(),url=location.origin+'/api/health';
+  return `<section class="panel" id="healthBox"><h2>${ico('heart')} Apple 健康自動同步</h2>
+  <p class="muted">設定一次就好。之後 iPhone 每天會自動把「活動能量」和「體重」送過來，打開 App 就會帶入，不用再手動貼。</p>
+  ${t?`<div class="minirow" style="border:0"><span>上次同步</span><b>${local.healthAt?new Date(local.healthAt).toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'還沒有'}</b></div>
+  <div class="row" style="margin:6px 0 10px"><button class="btn ghost" id="hpCopy">複製我的同步碼</button><button class="btn ghost" id="hpNow" style="width:auto;white-space:nowrap">立即同步</button></div>
+  <details class="howto"><summary>捷徑設定步驟（約 3 分鐘）</summary>
+  <p><b>A. 建立捷徑</b>：打開「捷徑」App → 右上角 ＋，依序加入：</p>
+  <ol>
+   <li><b>尋找健康樣本</b>：類型「活動能量」，篩選「開始日期」「是今天」</li>
+   <li><b>計算統計資料</b>：「總和」，輸入選上一步的「健康樣本」</li>
+   <li><b>設定變數</b>：名稱 <code>burn</code></li>
+   <li><b>尋找健康樣本</b>：類型「體重」，排序「開始日期」「最新優先」，限制「1」筆</li>
+   <li><b>設定變數</b>：名稱 <code>weight</code></li>
+   <li><b>取得 URL 內容</b>：網址填 <code>${esc(url)}</code>，展開後「方法」選 <b>POST</b>，「要求本文」選 <b>JSON</b>，新增 3 個文字欄位：
+     <br><code>token</code> ＝ 貼上同步碼
+     <br><code>burn</code> ＝ 選變數 burn
+     <br><code>weight</code> ＝ 選變數 weight</li>
+   <li><b>顯示結果</b>（測試用，之後可刪）</li>
+  </ol>
+  <p>捷徑命名「熱量同步」，按一次測試，看到「已同步」就成功了。第一次會問能不能讀取健康資料，選「允許」。</p>
+  <p><b>B. 設成每天自動執行</b>：捷徑 App 下方「自動化」→ ＋ →「特定時間」→ 選 <b>21:30</b>、「每天」→ 選「立即執行」並關掉「執行時通知」→ 下一步選「熱量同步」。</p>
+  <p class="muted">想更即時，可以再加一個 12:30 的自動化。同一天送多次，會以最後一次為準。</p></details>`
+  :`<button class="btn" id="hpOn">開始設定</button>`}
+  </section>`;
+}
+function bindHealth(){
+  const $=id=>document.getElementById(id);
+  if($('hpOn'))$('hpOn').onclick=async()=>{await ensureHealthToken();render();setTimeout(()=>{const d=document.querySelector('#healthBox details');if(d)d.open=true;document.getElementById('healthBox')?.scrollIntoView({behavior:'smooth'})},60)};
+  if($('hpCopy'))$('hpCopy').onclick=async()=>{try{await navigator.clipboard.writeText(healthToken());toast('已複製同步碼，貼到捷徑的 token 欄位')}catch(e){prompt('長按複製同步碼',healthToken())}};
+  if($('hpNow'))$('hpNow').onclick=async()=>{await healthPull();toast('已檢查最新資料');render()};
+}
 // ---------- 身體數據（體重、InBody）----------
 const BF=[['w','體重','kg',1,-1],['fat','體脂率','%',1,-1],['smm','骨骼肌重','kg',1,1],['fm','體脂肪重','kg',1,-1],['bmi','BMI','',1,-1],
   ['vf','內臟脂肪等級','',0,-1],['bmr','基礎代謝','大卡',0,1],['score','InBody 分數','分',0,1],['waist','腰圍','cm',1,-1]];
@@ -1428,7 +1512,7 @@ async function saveBody(rec,quiet){
   local.body=(local.body||[]).filter(r=>r.id!==rec.id).concat(rec);saveLocal();
   if(db)db.doc(`data/users/${uid}/profile`).collection('body').doc(rec.id).set(rec).catch(()=>toast('雲端同步失敗，已存在這支手機'));
   const lw=bodyLatest('w');
-  if(lw&&lw.id===rec.id&&local.profile&&Math.abs(+local.profile.w-rec.w)>.01){await saveProfile(Object.assign({},local.profile,{w:rec.w}),true);if(!quiet)toast('已更新體重，每日熱量目標也重新計算了')}
+  if(lw&&lw.id===rec.id&&!(quiet&&rec.src==='health'&&local.profile&&Math.abs(+local.profile.w-rec.w)<=.01)&&local.profile&&Math.abs(+local.profile.w-rec.w)>.01){await saveProfile(Object.assign({},local.profile,{w:rec.w}),true);if(!quiet)toast('已更新體重，每日熱量目標也重新計算了')}
   else syncPlayer();
   return rec;
 }
@@ -1511,7 +1595,7 @@ function bodyView(){
     ${chg!=null?`<p class="muted">這段期間 ${f[1]} ${chg>0?'增加':chg<0?'減少':'沒變'} <b class="${good?'up-good':'up-bad'}">${Math.abs(chg).toFixed(f[3])}${k==='fat'?' 個百分點':f[2]?' '+f[2]:''}</b>（${R.length} 筆紀錄）</p>`:''}
     <p class="muted">點圖上的點可以看當天數值。</p></section>
   <section class="panel"><h2>紀錄（${L.length} 筆）</h2>
-    ${L.slice().reverse().map(r=>`<div class="brow"><div><b>${r.date.slice(0,4)===todayKey().slice(0,4)?r.date.slice(5).replace('-','/'):r.date.replace(/-/g,'/')}</b> <span class="muted">${r.src==='inbody'?'InBody':'手動'}</span>
+    ${L.slice().reverse().map(r=>`<div class="brow"><div><b>${r.date.slice(0,4)===todayKey().slice(0,4)?r.date.slice(5).replace('-','/'):r.date.replace(/-/g,'/')}</b> <span class="muted">${r.src==='inbody'?'InBody':r.src==='health'?'Apple 健康':'手動'}</span>
       <div class="muted" style="font-size:13px">${BF.filter(x=>r[x[0]]!=null).map(x=>x[1]+' '+fmtB(x[0],r[x[0]])).join('、')}</div></div>
       <div class="row" style="gap:2px"><button class="x" data-be="${r.id}" aria-label="編輯">✎</button><button class="x" data-bd="${r.id}" aria-label="刪除">×</button></div></div>`).join('')}</section>`
   :`<section class="panel"><p>還沒有紀錄。量完體重或做完 InBody，拍結果單或手動輸入，就能看到趨勢。</p></section>`}
