@@ -284,6 +284,20 @@ nav.tabs .cam svg{width:28px;height:28px}
 .ph-empty{width:150px;aspect-ratio:3/4;display:flex;align-items:center;justify-content:center;text-align:center;font-size:13px;color:var(--muted);background:var(--surface);padding:10px}
 [hidden]{display:none!important}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+.bchart{width:100%;height:auto;display:block;margin-top:6px}
+.bchart .g{stroke:var(--line);stroke-width:1}
+.bchart .ax{font-size:11px;fill:var(--muted)}
+.bchart .ln{fill:none;stroke:var(--room);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.bchart .pt{fill:var(--room);stroke:var(--surface);stroke-width:2}
+.bchart .cross{stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3}
+.btip{margin:4px 0 8px}
+.brow{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:10px 0;border-top:1px solid var(--line)}
+.brow:first-of-type{border-top:0}
+.bgrid{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
+.chip.on{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.up-good{color:var(--ok)}.up-bad{color:var(--over)}
+.bchips{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+.pl .who .bchips b{display:inline}
 .tf-row{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;padding:10px 2px;border:0;border-bottom:1px solid var(--line);background:none;font:inherit;color:inherit;text-align:left}
 .tf-row small{display:block;font-size:12px;color:var(--muted);font-weight:400}
 .tf-row .num{white-space:nowrap;font-weight:700}
@@ -309,6 +323,7 @@ nav.tabs .cam svg{width:28px;height:28px}
   <button data-tab="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg>我的</button>
 </nav>
 <input type="file" id="photo" accept="image/*" capture="environment" hidden>
+<input type="file" id="inbodyFile" accept="image/*" hidden>
 <input type="file" id="photoLib" accept="image/*" hidden>
 
 <div class="sheet-wrap" id="sheetWrap"><div class="sheet" role="dialog" aria-modal="true" id="sheet"></div></div>
@@ -654,12 +669,14 @@ async function cloudInit(){
     else if(local.profile){await db.doc(`data/users/${uid}/profile`).set({profile:local.profile})}
     const days=await db.doc(`data/users/${uid}/profile`).collection('days').orderBy('date','desc').limit(14).get();
     days.docs.forEach(x=>{if(x.exists){const v=clone(x.data());local.days[v.date]={date:v.date,meals:v.meals||[],burn:v.burn||0}}});
-    saveLocal(); render(); photoCloudLoad();
+    saveLocal(); render(); photoCloudLoad(); bodyCloudLoad();
     }catch(e){console.warn('cloud',e)}
   });
 }
-async function saveProfile(p){
+async function saveProfile(p,fromBody){
+  const prevW=local.profile&&local.profile.w;
   p.updatedAt=Date.now(); local.profile=p; saveLocal();
+  if(!fromBody&&+p.w>0&&(!prevW||Math.abs(+prevW-+p.w)>.01||!bodyList().some(r=>r.w))){const lw=bodyLatest('w');if(!lw||Math.abs(lw.w-+p.w)>.01)saveBody({date:todayKey(),src:'manual',w:+p.w},true)}
   if(db) try{await db.doc(`data/users/${uid}/profile`).set({profile:p})}catch(e){toast('雲端同步失敗，已存在這支手機')}
   syncPlayer();
 }
@@ -700,6 +717,7 @@ function render(){
   if(tab==='cal'){app.innerHTML=calView();bindCal()}
   if(tab==='comp'){app.innerHTML=compView();bindComp()}
   if(tab==='advice'){app.innerHTML=adviceView();bindAdvice()}
+  if(tab==='body'){app.innerHTML=bodyView();bindBody()}
   if(tab==='settings'){app.innerHTML=setupView(false)+acctSection();bindSetup();bindLib();bindPhoto();bindAcct()}
   if(tab==='today')bindToday();
 }
@@ -725,13 +743,15 @@ function todayView(){
   </section>
   <section class="panel"><h2>營養素</h2><div class="macros">${mac(s.p,c.protein,'蛋白質')}${mac(s.c,carbG,'碳水')}${mac(s.f,fatG,'脂肪')}</div></section>
   <section class="panel"><div class="row" style="justify-content:space-between;margin-bottom:6px"><h2 style="margin:0">今天吃了</h2><button class="btn ghost" id="manualBtn" style="width:auto;padding:7px 12px;font-size:14px">用打字記錄</button></div>${mealsHtml}</section>
-  <button class="btn ghost" id="adviceBtn" style="margin-bottom:14px">💡 下一餐吃什麼？看飲食建議</button>`;
+  <button class="btn ghost" id="adviceBtn" style="margin-bottom:10px">💡 下一餐吃什麼？看飲食建議</button>
+  <button class="btn ghost" id="bodyBtn" style="margin-bottom:14px">📊 體重・InBody 紀錄與趨勢</button>`;
 }
 function bindToday(){
   bindMeals(app);
   const m=document.getElementById('manualBtn'); if(m)m.onclick=()=>openCapture(null,todayKey());
   document.getElementById('burnBtn').onclick=()=>openBurn(todayKey());
   document.getElementById('adviceBtn').onclick=()=>{tab='advice';render();window.scrollTo(0,0)};
+  document.getElementById('bodyBtn').onclick=()=>{tab='body';render();window.scrollTo(0,0)};
 }
 
 function weekView(){
@@ -858,6 +878,7 @@ function openChooser(date){
   document.getElementById('pLib').onclick=()=>{closeSheet();document.getElementById('photoLib').click()};
   document.getElementById('pTxt').onclick=()=>openCapture(null,date);
 }
+document.getElementById('inbodyFile').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)readInbody(f)};
 document.getElementById('photoLib').onchange=document.getElementById('photo').onchange=async e=>{
   const f=e.target.files[0]; e.target.value=''; if(!f)return;
   const blob=await shrink(f); openCapture(blob,pendingDate||todayKey());
@@ -1221,7 +1242,8 @@ async function syncPlayer(extra){
   const me=myPlayer(); if(!me&&!extra)return;
   const base=me?{nick:me.nick||'',joinedAt:me.joinedAt,shareWeight:!!me.shareWeight,startW:me.startW||local.profile.w}:{};
   const doc=Object.assign(base,extra||{},{days:playerDays(),curW:local.profile.w,updatedAt:Date.now()});
-  if(!doc.shareWeight){delete doc.startW;delete doc.curW}
+  doc.body=bodySummary(compCfg());
+  if(!doc.shareWeight){delete doc.startW;delete doc.curW;delete doc.body}
   try{await db.doc('players/'+uid).set(doc)}catch(e){if(extra)toast('加入失敗，請檢查網路後再試一次')}
 }
 function scoreOf(p,cfg){
@@ -1241,26 +1263,31 @@ function miniChar(p){return charSVG(p).replace('class="char"','class="char mini"
 function compView(){
   if(!db||!uid) return `<h1>好友競賽</h1><section class="panel"><p>還沒連上雲端，請先登入。</p></section>`;
   const cfg=compCfg(), me=myPlayer(), today=todayKey();
-  const rows=C.players.map(p=>Object.assign({p},scoreOf(p,cfg))).sort((a,b)=>b.pts-a.pts||b.streak-a.streak);
+  const rows=C.players.map(p=>Object.assign({p,bp:p.shareWeight?bodyProgress(p.body):null},scoreOf(p,cfg)));
+  if(C.rankBy==='body')rows.sort((a,b)=>(b.bp??-1e9)-(a.bp??-1e9)||b.pts-a.pts);else rows.sort((a,b)=>b.pts-a.pts||b.streak-a.streak);
   const medal=i=>['🥇','🥈','🥉'][i]||`<span class="num">${i+1}</span>`;
   const daysLeft=Math.max(0,Math.round((new Date(cfg.end)-new Date(today))/864e5)+1);
   const board=rows.length?rows.map((r,i)=>{
     const st=r.todayP>1?'💥 爆卡':r.todayP>.85?'😰 快滿':r.todayP>0?'😎 穩':'💤 還沒記';
-    const wl=r.p.shareWeight&&r.p.startW&&r.p.curW?((r.p.startW-r.p.curW)/r.p.startW*100):null;
+    const bt=r.p.shareWeight?bodyChips(r.p.body):'';
+    const wl=!bt&&r.p.shareWeight&&r.p.startW&&r.p.curW?((r.p.startW-r.p.curW)/r.p.startW*100):null;
     return `<div class="pl ${r.p.id===uid?'me':''}"><div class="rk">${medal(i)}</div>
       <div class="who"><b>${esc(nameOf(r.p.id))}${r.p.id===uid?'（你）':''}</b>
-      <span>${st}　連續達標 ${r.streak} 天${wl!=null?`　${wl>=0?'↓':'↑'}${Math.abs(wl).toFixed(1)}%`:''}</span></div>
-      <div class="pts num">${r.pts}<small>分</small></div></div>`}).join('')
+      <span>${st}　連續達標 ${r.streak} 天${wl!=null?`　${wl>=0?'↓':'↑'}${Math.abs(wl).toFixed(1)}%`:''}</span>${bt?`<span class="bchips">${bt}</span>`:''}</div>
+      <div class="pts num">${C.rankBy==='body'?(r.bp==null?'—':r.bp.toFixed(1)):r.pts}<small>${C.rankBy==='body'?'進步':'分'}</small></div></div>`}).join('')
     :`<p class="muted">還沒有人加入。你先加入，再邀朋友進來。</p>`;
   const taunts=C.taunts.map(t=>`<div class="tt"><b>${esc(nameOf(t.from))}</b><span class="muted">${new Date(t.at).toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span><p>${esc(t.text)}</p>${t.from===uid?`<button class="x" data-dt="${t.id}" aria-label="刪除">×</button>`:''}</div>`).join('')||'<p class="muted">還沒有人嗆聲。</p>';
   return `<h1>${esc(cfg.title)}</h1>
   <p class="muted">${cfg.start.slice(5).replace('-','/')} – ${cfg.end.slice(5).replace('-','/')}　·　${today>cfg.end?'已結束':today<cfg.start?'尚未開始':'剩 '+daysLeft+' 天'}</p>
   ${me?'':`<section class="panel join"><h2>加入競賽</h2>
     <label class="f">暱稱（排行榜上顯示）<input id="nick" maxlength="12" placeholder="不填就用你的 Google 名字"></label>
-    <label class="chk"><input type="checkbox" id="shareW"> 公開體重變化百分比（只顯示 %，不顯示公斤數）</label>
+    <label class="chk"><input type="checkbox" id="shareW"> 公開體重和身體數據變化（只顯示變化，不顯示實際數字）</label>
     <button class="btn fuel" id="joinBtn">加入</button></section>`}
-  <section class="panel"><h2>排行榜</h2>${board}
-    <p class="muted" style="margin-top:10px">計分：有記錄 +1，當天吃在目標的 70%–100% 再 +2。吃太少不加分，餓肚子贏不了。</p></section>
+  <section class="panel"><h2>排行榜</h2>
+    <div class="seg" id="rankBy" style="margin-bottom:8px"><button data-v="pts" aria-pressed="${C.rankBy!=='body'}">飲食記錄分</button><button data-v="body" aria-pressed="${C.rankBy==='body'}">體態進步</button></div>
+    ${board}
+    <p class="muted" style="margin-top:10px">${C.rankBy==='body'?'體態進步 = 體脂率下降的百分點 × 2 ＋ 體重下降 % ＋ 骨骼肌增加 kg。用競賽開始前最近一筆和最新一筆比較，只計算有公開身體數據的人。':'計分：有記錄 +1，當天吃在目標的 70%–100% 再 +2。吃太少不加分，餓肚子贏不了。'}</p>
+    ${me?`<label class="chk" style="margin-top:8px"><input type="checkbox" id="shareMe" ${me.shareWeight?'checked':''}> 公開我的體重和身體數據變化（只顯示變化，不顯示實際數字）</label>`:''}</section>
   <section class="panel"><h2>嗆聲板</h2>
     <div class="chips">${['今天又爆卡了喔？','我已經達標，你呢','放下那杯珍奶','明天一起去走路','加油，我在等你追上來'].map(t=>`<button class="chip" data-t="${t}">${t}</button>`).join('')}</div>
     <div class="row" style="margin:8px 0 6px"><input id="tauntIn" maxlength="60" placeholder="自己寫一句" class="ti"><button class="btn" id="tauntBtn" style="width:auto">送出</button></div>
@@ -1297,6 +1324,8 @@ function bindComp(){
     try{if(navigator.share){await navigator.share({title:'熱量小幫手競賽',text,url:SHARE_URL});return}}catch(e){if(e.name==='AbortError')return}
     try{await navigator.clipboard.writeText(text);toast('連結已複製')}catch(e){prompt('複製這段傳給朋友',text)}
   };
+  app.querySelectorAll('#rankBy button').forEach(b=>b.onclick=()=>{C.rankBy=b.dataset.v;render()});
+  if($('shareMe'))$('shareMe').onchange=e=>syncPlayer({shareWeight:e.target.checked,startW:myPlayer()?.startW||local.profile.w}).then(()=>toast(e.target.checked?'已公開身體數據變化':'已改成不公開'));
   if($('cSave'))$('cSave').onclick=async()=>{
     const c={title:$('cTitle').value.trim()||'減脂大作戰',start:$('cStart').value,end:$('cEnd').value};
     if(!c.start||!c.end||c.end<c.start){toast('日期不對');return}
@@ -1339,6 +1368,145 @@ function bindAcct(){const $=id=>document.getElementById(id);
   };
 }
 
+
+// ---------- 身體數據（體重、InBody）----------
+const BF=[['w','體重','kg',1,-1],['fat','體脂率','%',1,-1],['smm','骨骼肌重','kg',1,1],['fm','體脂肪重','kg',1,-1],['bmi','BMI','',1,-1],
+  ['vf','內臟脂肪等級','',0,-1],['bmr','基礎代謝','大卡',0,1],['score','InBody 分數','分',0,1],['waist','腰圍','cm',1,-1]];
+const BFm=Object.fromEntries(BF.map(f=>[f[0],f]));
+const BODY={metric:'w',range:90,tip:null};
+function bodyList(){return (local.body||[]).slice().sort((a,b)=>(a.date+(a.t||'')).localeCompare(b.date+(b.t||'')))}
+function bodyLatest(k){const L=bodyList().filter(r=>r[k]!=null);return L[L.length-1]||null}
+async function bodyCloudLoad(){
+  if(!db||!uid)return;
+  try{const q=await db.doc(`data/users/${uid}/profile`).collection('body').get();
+    const cloud=q.docs.filter(x=>x.exists).map(x=>Object.assign(JSON.parse(JSON.stringify(x.data())),{id:x.id}));
+    const ids=new Set(cloud.map(r=>r.id));
+    const localOnly=(local.body||[]).filter(r=>!ids.has(r.id));
+    local.body=cloud.concat(localOnly);saveLocal();
+    localOnly.forEach(r=>db.doc(`data/users/${uid}/profile`).collection('body').doc(r.id).set(r).catch(()=>{}));
+    if(tab==='body')render();syncPlayer();
+  }catch(e){console.warn('body',e)}
+}
+async function saveBody(rec,quiet){
+  rec=Object.assign({},rec);if(!rec.id)rec.id=rec.date.replace(/-/g,'')+'-'+Date.now().toString(36);rec.t=rec.t||new Date().toTimeString().slice(0,5);
+  BF.forEach(([k])=>{if(rec[k]===''||rec[k]==null||isNaN(+rec[k]))delete rec[k];else rec[k]=+rec[k]});
+  local.body=(local.body||[]).filter(r=>r.id!==rec.id).concat(rec);saveLocal();
+  if(db)db.doc(`data/users/${uid}/profile`).collection('body').doc(rec.id).set(rec).catch(()=>toast('雲端同步失敗，已存在這支手機'));
+  const lw=bodyLatest('w');
+  if(lw&&lw.id===rec.id&&local.profile&&Math.abs(+local.profile.w-rec.w)>.01){await saveProfile(Object.assign({},local.profile,{w:rec.w}),true);if(!quiet)toast('已更新體重，每日熱量目標也重新計算了')}
+  else syncPlayer();
+  return rec;
+}
+async function deleteBody(id){
+  local.body=(local.body||[]).filter(r=>r.id!==id);saveLocal();
+  if(db)db.doc(`data/users/${uid}/profile`).collection('body').doc(id).delete().catch(()=>{});
+  syncPlayer();
+}
+function bodySummary(cfg){
+  // 競賽比較：開始日（含）之前最近一筆 vs 最新一筆
+  const out={};for(const k of ['w','fat','smm']){const L=bodyList().filter(r=>r[k]!=null);if(!L.length)continue;
+    const before=L.filter(r=>r.date<=cfg.start);const a=(before[before.length-1]||L[0]),b=L[L.length-1];
+    out[k]=[a[k],b[k],a.date,b.date]}
+  return Object.keys(out).length?out:null;
+}
+function bodyProgress(b){
+  if(!b)return null;let v=0,has=false;
+  if(b.fat&&b.fat[2]!==b.fat[3]){v+=(b.fat[0]-b.fat[1])*2;has=true}
+  if(b.w&&b.w[2]!==b.w[3]&&b.w[0]){v+=(b.w[0]-b.w[1])/b.w[0]*100;has=true}
+  if(b.smm&&b.smm[2]!==b.smm[3]){v+=b.smm[1]-b.smm[0];has=true}
+  return has?Math.round(v*10)/10:null;
+}
+function bodyChips(b){
+  if(!b)return '';const o=[];
+  const ar=(d,good)=>`<b class="${good?'up-good':'up-bad'}">${d>0?'↑':d<0?'↓':'→'}`;
+  if(b.w&&b.w[2]!==b.w[3]&&b.w[0]){const d=(b.w[1]-b.w[0])/b.w[0]*100;o.push(`體重 ${ar(d,d<=0)}${Math.abs(d).toFixed(1)}%</b>`)}
+  if(b.fat&&b.fat[2]!==b.fat[3]){const d=b.fat[1]-b.fat[0];o.push(`體脂 ${ar(d,d<=0)}${Math.abs(d).toFixed(1)}點</b>`)}
+  if(b.smm&&b.smm[2]!==b.smm[3]){const d=b.smm[1]-b.smm[0];o.push(`肌肉 ${ar(d,d>=0)}${Math.abs(d).toFixed(1)}kg</b>`)}
+  return o.map(x=>`<span style="white-space:nowrap">${x}</span>`).join('　');
+}
+function fmtB(k,v){const f=BFm[k];return v==null?'—':(+v).toFixed(f[3])+(f[2]?' '+f[2]:'')}
+function bodyChart(){
+  const k=BODY.metric,f=BFm[k];let L=bodyList().filter(r=>r[k]!=null);
+  if(BODY.range){const cut=addDays(todayKey(),-BODY.range);L=L.filter(r=>r.date>=cut)}
+  if(!L.length)return `<p class="muted" style="padding:28px 0;text-align:center">這段期間還沒有${f[1]}的紀錄。</p>`;
+  const W=340,H=190,pl=40,pr=14,pt=14,pb=26;
+  const t=r=>new Date(r.date+'T'+(r.t||'12:00')).getTime();
+  const xs=L.map(t),ys=L.map(r=>+r[k]);let x0=Math.min(...xs),x1=Math.max(...xs);if(x1===x0){x0-=864e5*3;x1+=864e5*3}
+  let y0=Math.min(...ys),y1=Math.max(...ys);const pad=Math.max((y1-y0)*.2,f[0]==='w'?1:f[0]==='fat'?1:.5);y0-=pad;y1+=pad;
+  const X=v=>pl+(v-x0)/(x1-x0)*(W-pl-pr),Y=v=>pt+(1-(v-y0)/(y1-y0))*(H-pt-pb);
+  const ticks=[0,1,2,3].map(i=>y0+(y1-y0)*i/3);
+  const md=ms=>{const d=new Date(ms);return (d.getMonth()+1)+'/'+d.getDate()};
+  const path=L.map((r,i)=>(i?'L':'M')+X(xs[i]).toFixed(1)+' '+Y(ys[i]).toFixed(1)).join(' ');
+  const tip=BODY.tip!=null&&L[BODY.tip]?BODY.tip:L.length-1;
+  return `<svg viewBox="0 0 ${W} ${H}" class="bchart" role="img" aria-label="${f[1]}趨勢圖，${L.length} 筆，最新 ${fmtB(k,ys[ys.length-1])}">
+    ${ticks.map(v=>`<line x1="${pl}" x2="${W-pr}" y1="${Y(v)}" y2="${Y(v)}" class="g"/><text x="${pl-6}" y="${Y(v)+4}" text-anchor="end" class="ax">${v.toFixed(f[3]&&y1-y0<10?1:0)}</text>`).join('')}
+    <text x="${pl}" y="${H-6}" class="ax">${md(x0)}</text><text x="${W-pr}" y="${H-6}" text-anchor="end" class="ax">${md(x1)}</text>
+    <path d="${path}" class="ln"/>
+    <line x1="${X(xs[tip])}" x2="${X(xs[tip])}" y1="${pt}" y2="${H-pb}" class="cross"/>
+    ${L.map((r,i)=>`<circle cx="${X(xs[i])}" cy="${Y(ys[i])}" r="${i===tip?6:4}" class="pt ${i===tip?'on':''}"/><rect x="${X(xs[i])-14}" y="${pt}" width="28" height="${H-pt-pb}" fill="transparent" data-bi="${i}" style="cursor:pointer"/>`).join('')}
+  </svg>
+  <p class="btip"><b>${L[tip].date.slice(5).replace('-','/')}</b>　${f[1]} <b class="num">${fmtB(k,ys[tip])}</b>${L[tip].src==='inbody'?'　<span class="muted">InBody</span>':''}</p>`;
+}
+function bodyView(){
+  const L=bodyList(),has=BF.filter(f=>L.some(r=>r[f[0]]!=null));
+  if(has.length&&!has.some(f=>f[0]===BODY.metric))BODY.metric=has[0][0];
+  const k=BODY.metric,f=BFm[k];
+  let R=L.filter(r=>r[k]!=null);if(BODY.range){const cut=addDays(todayKey(),-BODY.range);R=R.filter(r=>r.date>=cut)}
+  const chg=R.length>1?R[R.length-1][k]-R[0][k]:null;
+  const good=chg==null?null:chg*f[4]>=0;
+  const latest=L[L.length-1];
+  return `<button class="x" onclick="tab='today';render()" style="font-size:15px;padding:4px 0">‹ 回今天</button><h1>身體數據</h1>
+  <div class="row" style="gap:8px;margin-bottom:14px"><button class="btn fuel" id="bInbody">📷 拍 InBody 結果</button><button class="btn" id="bManual">✍️ 手動輸入</button></div>
+  ${L.length?`<section class="panel"><h2>趨勢</h2>
+    <div class="chips">${has.map(x=>`<button class="chip ${x[0]===k?'on':''}" data-bm="${x[0]}">${x[1]}</button>`).join('')}</div>
+    <div class="seg" id="bRange" style="margin:8px 0">${[[30,'1 個月'],[90,'3 個月'],[365,'1 年'],[0,'全部']].map(([v,t])=>`<button data-v="${v}" aria-pressed="${BODY.range===v}">${t}</button>`).join('')}</div>
+    ${bodyChart()}
+    ${chg!=null?`<p class="muted">這段期間 ${f[1]} ${chg>0?'增加':chg<0?'減少':'沒變'} <b class="${good?'up-good':'up-bad'}">${Math.abs(chg).toFixed(f[3])}${k==='fat'?' 個百分點':f[2]?' '+f[2]:''}</b>（${R.length} 筆紀錄）</p>`:''}
+    <p class="muted">點圖上的點可以看當天數值。</p></section>
+  <section class="panel"><h2>紀錄（${L.length} 筆）</h2>
+    ${L.slice().reverse().map(r=>`<div class="brow"><div><b>${r.date.slice(0,4)===todayKey().slice(0,4)?r.date.slice(5).replace('-','/'):r.date.replace(/-/g,'/')}</b> <span class="muted">${r.src==='inbody'?'InBody':'手動'}</span>
+      <div class="muted" style="font-size:13px">${BF.filter(x=>r[x[0]]!=null).map(x=>x[1]+' '+fmtB(x[0],r[x[0]])).join('、')}</div></div>
+      <div class="row" style="gap:2px"><button class="x" data-be="${r.id}" aria-label="編輯">✎</button><button class="x" data-bd="${r.id}" aria-label="刪除">×</button></div></div>`).join('')}</section>`
+  :`<section class="panel"><p>還沒有紀錄。量完體重或做完 InBody，拍結果單或手動輸入，就能看到趨勢。</p></section>`}
+  <p class="muted" style="margin-bottom:16px">新的體重會自動更新每日熱量目標。在競賽頁勾選公開後，朋友只會看到變化，看不到實際數字。</p>`;
+}
+function bindBody(){
+  const $=id=>document.getElementById(id);
+  $('bManual').onclick=()=>openBodyForm({date:todayKey(),src:'manual'});
+  $('bInbody').onclick=()=>$('inbodyFile').click();
+  app.querySelectorAll('[data-bm]').forEach(b=>b.onclick=()=>{BODY.metric=b.dataset.bm;BODY.tip=null;render()});
+  app.querySelectorAll('#bRange button').forEach(b=>b.onclick=()=>{BODY.range=+b.dataset.v;BODY.tip=null;render()});
+  app.querySelectorAll('[data-bi]').forEach(b=>b.onclick=()=>{BODY.tip=+b.dataset.bi;render()});
+  app.querySelectorAll('[data-be]').forEach(b=>b.onclick=()=>openBodyForm(bodyList().find(r=>r.id===b.dataset.be)));
+  app.querySelectorAll('[data-bd]').forEach(b=>b.onclick=()=>{if(confirm('刪除這筆紀錄？')){deleteBody(b.dataset.bd);render()}});
+}
+function openBodyForm(rec,note){
+  const r=Object.assign({},rec);
+  openSheet(`<h2>${r.src==='inbody'?'確認 InBody 數值':'記錄身體數據'}</h2>${note?`<p class="muted">${esc(note)}</p>`:''}
+    <label class="f">日期<input type="date" id="bfDate" value="${esc(r.date||todayKey())}"></label>
+    <div class="bgrid">${BF.map(([k,t,u])=>`<label class="f">${t}${u?' <span class="muted">'+u+'</span>':''}<input type="number" inputmode="decimal" step="any" data-bf="${k}" value="${r[k]??''}"></label>`).join('')}</div>
+    <p class="muted">沒有的欄位留空就好。只量體重的話填體重就行。</p>
+    <button class="btn fuel" id="bfSave">儲存</button><button class="btn ghost" style="margin-top:8px" onclick="closeSheet()">取消</button>`);
+  document.getElementById('bfSave').onclick=async()=>{
+    const o=Object.assign({},r,{date:document.getElementById('bfDate').value||todayKey()});
+    sheet.querySelectorAll('[data-bf]').forEach(i=>{o[i.dataset.bf]=i.value.trim()});
+    if(!BF.some(([k])=>o[k]!==''&&o[k]!=null)){toast('至少填一個數值');return}
+    await saveBody(o);closeSheet();toast('已記錄');tab='body';render();
+  };
+}
+async function readInbody(file){
+  if(!(sample&&canImages)){openBodyForm({date:todayKey(),src:'inbody'});return}
+  openSheet(`<h2>讀取 InBody 結果</h2><div class="thinking"><span class="dot"></span><span class="dot"></span><span class="dot"></span>正在讀數字…</div>`);
+  try{
+    const img=await new Promise(res=>{const u=URL.createObjectURL(file),im=new Image();im.onload=()=>{const m=1600,sc=Math.min(1,m/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=im.width*sc;c.height=im.height*sc;c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);c.toBlob(b=>res(b||file),'image/jpeg',.9)};im.onerror=()=>res(file);im.src=u});
+    const r=await sample.json(`這是一張 InBody（身體組成分析）結果單或體重計畫面的照片。把上面的數字讀出來，只讀照片上真的有的，沒有的填 null，不要推算。
+只回傳 JSON：{"found":true或false,"date":"測量日期 YYYY-MM-DD，看不到填 null","w":體重kg,"fat":體脂肪率%,"smm":骨骼肌重kg,"fm":體脂肪重kg,"bmi":BMI,"vf":內臟脂肪等級,"bmr":基礎代謝率kcal,"score":InBody分數,"waist":腰圍cm,"note":"讀不清楚的地方"}
+注意：「骨骼肌重」(Skeletal Muscle Mass) 不是「肌肉重」或「除脂體重」；「體脂肪率」(PBF) 是百分比，「體脂肪重」(Body Fat Mass) 是公斤。`,{images:[img],modelTier:'default'});
+    if(!r||!r.found){openBodyForm({date:todayKey(),src:'inbody'},'照片上讀不到數值，請手動填。');return}
+    const o={date:/^\d{4}-\d{2}-\d{2}$/.test(r.date||'')&&r.date<=todayKey()?r.date:todayKey(),src:'inbody'};BF.forEach(([k])=>{if(r[k]!=null&&!isNaN(+r[k]))o[k]=+r[k]});
+    openBodyForm(o,'請對照結果單確認數字，有錯直接改。'+(r.note?'　'+r.note:''));
+  }catch(e){openBodyForm({date:todayKey(),src:'inbody'},'讀取失敗（'+errMsg(e)+'），請手動填。')}
+}
 // ---------- 食藥署食品營養成分資料（每 100g）----------
 const TF={list:null,p:null};
 function tfndLoad(){
