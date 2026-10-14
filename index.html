@@ -10,7 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#E9F0EC; --surface:#FFFFFF; --ink:#1B3530; --muted:#5E7570; --line:#CFDDD6;
+  --bg:#E9F0EC; --surface:#FFFFFF; --ink:#1B3530; --muted:#4F6863; --line:#CFDDD6;
   --fuel:#F2B705; --fuel2:#F7D25E; --room:#2F6FDB; --over:#D64545; --ok:#2E8B57;
   --body:#D6E3DD;
   box-sizing:border-box;
@@ -43,6 +43,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
 .btn.fuel{background:var(--fuel);color:#1B1B10}
 .btn:disabled{opacity:.5}
+.btn .ic{width:20px;height:20px;vertical-align:-4px;margin-right:6px}
+.ic{width:18px;height:18px;flex:none}
 .row{display:flex;gap:10px;align-items:center}
 .panel{background:var(--surface);border-radius:20px;padding:16px;margin-bottom:14px}
 label.f{display:block;font-size:14px;color:var(--muted);margin-bottom:12px}
@@ -65,7 +67,9 @@ label.f input,label.f select,textarea{display:block;width:100%;margin-top:4px;pa
 .macro b{display:block;font-size:18px}
 .macro span{font-size:12px;color:var(--muted)}
 .bar{height:6px;background:var(--line);border-radius:3px;margin-top:6px;overflow:hidden}
-.bar i{display:block;height:100%;background:var(--ink);border-radius:3px;transition:width .6s}
+.bar i{display:block;height:100%;background:var(--muted);border-radius:3px;transition:width .6s}
+.bar i.go,.bar i.ok{background:var(--ok)}.bar i.near{background:var(--fuel)}.bar i.over{background:var(--over)}
+.macro span em{font-style:normal;margin-left:4px;font-size:11px;opacity:.8}
 
 .meal{display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line)}
 .meal:first-of-type{border-top:0}
@@ -117,6 +121,13 @@ nav.tabs .cam svg{width:28px;height:28px}
 .week i{display:block;width:100%;border-radius:6px 6px 2px 2px;background:var(--fuel);min-height:2px;transition:height .6s}
 .week i.over{background:var(--over)}
 .goal-line{position:relative}
+.wk2 .wrow{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;text-align:center;font-size:11px;color:var(--muted)}
+.wbars{position:relative;height:110px;margin:4px 0}
+.wbars>div:not(.wgoal){display:flex;align-items:flex-end;height:100%}
+.wbars i{display:block;width:100%;border-radius:6px 6px 2px 2px;background:var(--fuel);transition:height .6s}
+.wbars i.over{background:var(--over)}
+.wgoal{position:absolute;left:0;right:0;border-top:1.5px dashed var(--ink);opacity:.55;z-index:1;pointer-events:none}
+.wdays .td{color:var(--ink);font-weight:700}
 
 .advice{white-space:pre-wrap;font-size:15px}
 .tip{border-left:4px solid var(--fuel);padding:2px 0 2px 12px;margin:10px 0}
@@ -199,7 +210,7 @@ nav.tabs .cam svg{width:28px;height:28px}
 .stage.run .leaf{animation:leaf 5s linear 2.6s forwards}
 .stage.run .leaf.l2{animation-delay:3s}.stage.run .leaf.l3{animation-delay:3.4s}
 @keyframes leaf{0%{opacity:0;transform:translate(0,0) rotate(0)}10%{opacity:1}50%{transform:translate(40px,160px) rotate(180deg)}100%{opacity:0;transform:translate(-20px,330px) rotate(360deg)}}
-.judge{text-align:left;background:var(--bg);border-radius:16px;padding:12px 14px;margin:12px 0;border-left:5px solid var(--room)}
+.judge{text-align:left;background:var(--bg);border-radius:16px;padding:12px 14px;margin:12px 0;border-left:5px solid var(--ok)}
 .judge.savage{border-left-color:var(--over)}
 .judge p{margin:6px 0 0;font-size:16px;min-height:24px}
 .judge.savage p{font-weight:700}
@@ -241,11 +252,13 @@ nav.tabs .cam svg{width:28px;height:28px}
 .cd .dk{font-size:10px;color:var(--muted)}
 .cd.green{background:#CFE8D6}.cd.yellow{background:#F7E7B0}.cd.red{background:#F5C6C0}
 .cd.green .dk,.cd.yellow .dk,.cd.red .dk{color:#3F3326}.cd.green .dn,.cd.yellow .dn,.cd.red .dn{color:#2A2118}
-.cd.today{box-shadow:inset 0 0 0 2px var(--ink)}
-.cd.sel{outline:3px solid var(--room);outline-offset:1px}
-.cd.future{opacity:.45}
-.legend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-top:10px}
-.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+.cd.today .dn{background:var(--ink);color:var(--surface)!important;border-radius:999px;min-width:22px;padding:0 5px}
+.cd.sel{outline:2.5px solid var(--ink);outline-offset:1px}
+.cd.future{opacity:.35;background:transparent}
+.cd.empty{background:transparent;box-shadow:inset 0 0 0 1.5px var(--line)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted);margin-top:10px}
+.legend i{display:inline-block;width:16px;height:16px;line-height:16px;text-align:center;font-style:normal;font-size:11px;color:#2A2118;border-radius:4px;margin-right:4px;vertical-align:-3px}
+.legend i.empty{box-shadow:inset 0 0 0 1.5px var(--line)}
 .legend i.green{background:#CFE8D6}.legend i.yellow{background:#F7E7B0}.legend i.red{background:#F5C6C0}
 .big-x{font-size:26px;padding:0 12px}
 .item.item3{grid-template-columns:1fr 84px 28px}
@@ -284,6 +297,9 @@ nav.tabs .cam svg{width:28px;height:28px}
 .ph-empty{width:150px;aspect-ratio:3/4;display:flex;align-items:center;justify-content:center;text-align:center;font-size:13px;color:var(--muted);background:var(--surface);padding:10px}
 [hidden]{display:none!important}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+.bcard{display:flex;justify-content:space-between;align-items:center;width:100%;border:0;text-align:left;font:inherit;color:inherit;gap:10px}
+.bcard .ic{color:var(--muted)}
+.spark{width:96px;height:32px}.spark polyline{fill:none;stroke:var(--room);stroke-width:2;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
 .bchart{width:100%;height:auto;display:block;margin-top:6px}
 .bchart .g{stroke:var(--line);stroke-width:1}
 .bchart .ax{font-size:11px;fill:var(--muted)}
@@ -549,7 +565,7 @@ function photoSection(){
    <label class="f">臉的大小<input type="range" id="phSize" min="15" max="80" value="${Math.round(fullLM(PH.lm).face.w*100)}"></label>
    <div class="seg" id="phStyle"><button data-v="paint" aria-pressed="${PH.style==='paint'}">🎨 手繪動畫風</button><button data-v="raw" aria-pressed="${PH.style==='raw'}">📷 原始照片</button></div>`
    :`<p class="muted">上傳一張正面、臉清楚的照片。照片只存在你自己的帳號裡，不會出現在競賽排行榜。</p>`}
-   <button class="btn" id="phUp" style="margin-top:12px">${PH.url?'換一張照片':'上傳照片'}</button>
+   <button class="btn ghost" id="phUp" style="margin-top:12px">${PH.url?'換一張照片':'上傳照片'}</button>
    ${PH.url?`<button class="btn ghost" id="phDel" style="margin-top:8px">刪除照片</button>`:''}
    <input type="file" id="phFile" accept="image/*" hidden></section>`;
 }
@@ -676,7 +692,7 @@ async function cloudInit(){
 async function saveProfile(p,fromBody){
   const prevW=local.profile&&local.profile.w;
   p.updatedAt=Date.now(); local.profile=p; saveLocal();
-  if(!fromBody&&+p.w>0&&(!prevW||Math.abs(+prevW-+p.w)>.01||!bodyList().some(r=>r.w))){const lw=bodyLatest('w');if(!lw||Math.abs(lw.w-+p.w)>.01)saveBody({date:todayKey(),src:'manual',w:+p.w},true)}
+  if(!fromBody&&+p.w>0&&(!prevW||Math.abs(+prevW-+p.w)>.01||!bodyList().some(r=>r.w))){const lw=bodyLatest('w');if(!lw||Math.abs(lw.w-+p.w)>.01){const ex=bodyList().find(r=>r.date===todayKey()&&r.src==='manual'&&BF.every(([k])=>k==='w'||r[k]==null));saveBody(Object.assign({},ex||{},{date:todayKey(),src:'manual',w:+p.w}),true)}}
   if(db) try{await db.doc(`data/users/${uid}/profile`).set({profile:p})}catch(e){toast('雲端同步失敗，已存在這支手機')}
   syncPlayer();
 }
@@ -686,6 +702,18 @@ async function saveDay(date){
   syncPlayer();
 }
 
+const IC={
+ cam:'<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+ img:'<rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M20 16l-5-5-8 8"/>',
+ bar:'<path d="M4 6v12M7 6v12M10 6v12M14 6v12M16 6v12M20 6v12"/>',
+ key:'<rect x="3" y="7" width="18" height="11" rx="2"/><path d="M7 11h1M11 11h1M15 11h1M8 15h8"/>',
+ bulb:'<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/>',
+ scale:'<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8.5 10a4 4 0 0 1 7 0M12 10l1.5-2"/>',
+ search:'<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>',
+ pen:'<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/>',
+ doc:'<path d="M7 3h7l4 4v14H7z"/><path d="M10 12h5M10 16h5"/>',
+ chev:'<path d="M9 6l6 6-6 6"/>'};
+const ico=n=>`<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n]}</svg>`;
 // ---------- calc ----------
 const ACT=[{k:1.2,t:'幾乎不動',d:'坐辦公室、少走路'},{k:1.375,t:'輕度',d:'每週運動 1–3 天'},{k:1.55,t:'中度',d:'每週運動 3–5 天'},{k:1.725,t:'高度',d:'每週運動 6–7 天'}];
 const PACE=[{kg:.25,t:'慢慢來'},{kg:.5,t:'標準'},{kg:.75,t:'積極'}];
@@ -726,7 +754,7 @@ function todayView(){
   const c=calc(local.profile), d=day(), s=sum(d.meals), B=budget(todayKey()), burn=+(d.burn)||0;
   const left=B-s.kcal, pct=s.kcal/B, over=left<0;
   const mealsHtml=mealsList(todayKey());
-  const mac=(v,g,lbl)=>`<div class="macro"><b class="num">${Math.round(v)}<span> / ${g}g</span></b><span>${lbl}</span><div class="bar"><i style="width:${Math.min(100,v/g*100)}%"></i></div></div>`;
+  const mac=(v,g,lbl,goal)=>{const p=v/g;const cls=goal?(p>=1?'ok':'go'):p>1?'over':p>=.85?'near':'';return `<div class="macro"><b class="num">${Math.round(v)}<span> / ${g}g</span></b><span>${lbl}<em>${goal?'目標':'上限'}</em></span><div class="bar"><i class="${cls}" style="width:${Math.min(100,p*100)}%"></i></div></div>`};
   const carbG=Math.round(c.target*.45/4), fatG=Math.round(c.target*.28/9);
   return `<h1>${new Date().toLocaleDateString('zh-TW',{month:'long',day:'numeric',weekday:'short'})}</h1>
   <section class="hero ${over?'over':''}">
@@ -741,17 +769,17 @@ function todayView(){
       </div>
     </div>
   </section>
-  <section class="panel"><h2>營養素</h2><div class="macros">${mac(s.p,c.protein,'蛋白質')}${mac(s.c,carbG,'碳水')}${mac(s.f,fatG,'脂肪')}</div></section>
+  <section class="panel"><h2>營養素</h2><div class="macros">${mac(s.p,c.protein,'蛋白質',1)}${mac(s.c,carbG,'碳水')}${mac(s.f,fatG,'脂肪')}</div></section>
+  ${bodyCard()}
   <section class="panel"><div class="row" style="justify-content:space-between;margin-bottom:6px"><h2 style="margin:0">今天吃了</h2><button class="btn ghost" id="manualBtn" style="width:auto;padding:7px 12px;font-size:14px">用打字記錄</button></div>${mealsHtml}</section>
-  <button class="btn ghost" id="adviceBtn" style="margin-bottom:10px">💡 下一餐吃什麼？看飲食建議</button>
-  <button class="btn ghost" id="bodyBtn" style="margin-bottom:14px">📊 體重・InBody 紀錄與趨勢</button>`;
+  <button class="btn ghost" id="adviceBtn" style="margin-bottom:14px">${ico('bulb')}下一餐吃什麼？看飲食建議</button>`;
 }
 function bindToday(){
   bindMeals(app);
   const m=document.getElementById('manualBtn'); if(m)m.onclick=()=>openCapture(null,todayKey());
   document.getElementById('burnBtn').onclick=()=>openBurn(todayKey());
   document.getElementById('adviceBtn').onclick=()=>{tab='advice';render();window.scrollTo(0,0)};
-  document.getElementById('bodyBtn').onclick=()=>{tab='body';render();window.scrollTo(0,0)};
+  document.getElementById('bodyCard').onclick=()=>{tab='body';render();window.scrollTo(0,0)};
 }
 
 function weekView(){
@@ -762,9 +790,12 @@ function weekView(){
   const avg=logged.length?Math.round(logged.reduce((a,b)=>a+b.kcal,0)/logged.length):0;
   const goalPos=c.target/max*100;
   const est=logged.reduce((a,b)=>a+(c.tdee-b.kcal),0)/7700;
-  return `<h2 style="margin-top:20px">這一週</h2><p class="muted">每日目標 ${c.target} 大卡，紅色是超過的日子</p>
-  <section class="panel"><div class="goal-line"><div class="week">${arr.map(a=>`<div><span class="num">${a.kcal?Math.round(a.kcal):''}</span><i class="${a.kcal>a.b?'over':''}" style="height:${a.kcal/max*100}%"></i>${'日一二三四五六'[a.d.getDay()]}</div>`).join('')}</div>
-</div></section>
+  return `<h2 style="margin-top:20px">這一週</h2><p class="muted">虛線是每日目標 ${c.target} 大卡，紅色是超標的日子</p>
+  <section class="panel"><div class="wk2">
+    <div class="wrow">${arr.map(a=>`<span class="num">${a.kcal?Math.round(a.kcal):'–'}</span>`).join('')}</div>
+    <div class="wrow wbars"><div class="wgoal" style="bottom:${goalPos}%"></div>${arr.map(a=>`<div><i class="${a.kcal>a.b?'over':''}" style="height:${a.kcal/max*100}%"></i></div>`).join('')}</div>
+    <div class="wrow wdays">${arr.map(a=>`<span class="${a.k===todayKey()?'td':''}">${a.k===todayKey()?'今天':'日一二三四五六'[a.d.getDay()]}</span>`).join('')}</div>
+  </div></section>
   <section class="panel">
    <div class="minirow" style="border:0"><span>有記錄的天數</span><b class="num">${logged.length} / 7</b></div>
    <div class="minirow"><span>平均每天</span><b class="num">${avg||'—'} 大卡</b></div>
@@ -819,7 +850,7 @@ function setupView(first){
   return `<h1>${first?'先設定你的基本資料':'我的資料'}</h1>
   <p class="muted">${first?'用來算出你每天需要多少熱量。資料只存在你的帳號裡。':''}</p>
   ${first?photoSection():''}
-  <section class="panel" id="setup">
+  <section class="panel" id="setup">${first?'':'<div class="row" style="justify-content:space-between;align-items:baseline"><h2>基本資料</h2><span class="muted" id="autoSaved" style="font-size:12px">修改會自動儲存</span></div>'}
     <label class="f">性別<div class="seg" data-k="sex"><button data-v="f" aria-pressed="${p.sex==='f'}">女</button><button data-v="m" aria-pressed="${p.sex==='m'}">男</button></div></label>
     <div class="row"><label class="f" style="flex:1">年齡<input type="number" inputmode="numeric" data-k="age" value="${p.age}"></label>
     <label class="f" style="flex:1">身高 cm<input type="number" inputmode="decimal" data-k="h" value="${p.h}"></label></div>
@@ -829,10 +860,8 @@ function setupView(first){
     <label class="f">減重速度<div class="seg" data-k="pace">${PACE.map((a,i)=>`<button data-v="${i}" aria-pressed="${p.pace==i}">${a.t}<br><small>${a.kg} kg/週</small></button>`).join('')}</div></label>
     <label class="f">每餐評語模式<div class="seg" data-k="mode"><button data-v="soft" aria-pressed="${p.mode!=='savage'}">🫧 我是玻璃心<br><small>溫柔鼓勵</small></button><button data-v="savage" aria-pressed="${p.mode==='savage'}">🔥 不賤我不聽<br><small>毒舌吐槽</small></button></div></label>
   </section>
-  <section class="panel" id="calcOut">${calcHtml(p,c)}</section>
-  <button class="btn" id="saveSetup">${first?'開始使用':'儲存'}</button>
-  ${first?'':'<div style="height:16px"></div>'+photoSection()+libSection()}
-  ${first?'':`<p class="muted" style="margin-top:14px">${db?'已同步到你的帳號，換裝置也看得到。':'目前資料只存在這支手機。'}</p>`}`;
+  <section class="panel">${first?'':'<h2>每日熱量</h2>'}<div id="calcOut">${calcHtml(p,c)}</div></section>
+  ${first?'<button class="btn fuel" id="saveSetup">開始使用</button>':photoSection()+libSection()}`;
 }
 function calcHtml(p,c){
   const weeks=p.w>p.goal?Math.ceil((p.w-p.goal)/PACE[p.pace].kg):0;
@@ -851,8 +880,13 @@ function bindSetup(){
   const upd=()=>{const p=read();if(p.age&&p.h&&p.w)document.getElementById('calcOut').innerHTML=calcHtml(p,calc(p))};
   el.querySelectorAll('.seg button').forEach(b=>b.onclick=async e=>{e.preventDefault();b.parentNode.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed','false'));b.setAttribute('aria-pressed','true');upd();
     if(b.parentNode.dataset.k==='who'&&local.profile&&tab==='settings'){const p=read();if(p.age&&p.h&&p.w){await saveProfile(p);render();if(p.who==='photo')document.getElementById('photoBox')?.scrollIntoView({behavior:'smooth'})}}});
-  el.querySelectorAll('input,select').forEach(i=>i.oninput=upd);
-  document.getElementById('saveSetup').onclick=async()=>{
+  let at=null;
+  const auto=()=>{if(!local.profile||document.getElementById('saveSetup'))return;clearTimeout(at);at=setTimeout(async()=>{const p=read();
+    if(!(p.age>=13&&p.h>=100&&p.w>=25)){const m=document.getElementById('autoSaved');if(m)m.textContent='年齡、身高、體重要填好才會儲存';return}
+    await saveProfile(Object.assign({},local.profile,p));const m=document.getElementById('autoSaved');if(m){m.textContent='✓ 已儲存';setTimeout(()=>{if(m)m.textContent='修改會自動儲存'},1800)}},700)};
+  el.querySelectorAll('input,select').forEach(i=>{i.oninput=()=>{upd();auto()};i.onchange=auto});
+  el.querySelectorAll('.seg button').forEach(b=>b.addEventListener('click',auto));
+  if(document.getElementById('saveSetup'))document.getElementById('saveSetup').onclick=async()=>{
     const p=read(); if(!(p.age>=13&&p.h>=100&&p.w>=25)){toast('請確認年齡、身高、體重');return}
     await saveProfile(p); tab='today'; render(); toast('已儲存');
   };
@@ -869,10 +903,10 @@ document.getElementById('camBtn').onclick=()=>{if(!local.profile){toast('先完�
 function openChooser(date){
   pendingDate=date;
   openSheet(`<h2>${date===todayKey()?'記錄這一餐':'補記 '+date.slice(5).replace('-','/')+' 的一餐'}</h2><div class="pick">
-    <button class="btn fuel" id="pCam">📷 拍照</button>
-    <button class="btn" id="pLib">🖼️ 從相簿上傳</button>
-    <button class="btn" id="pBar">🔖 掃包裝條碼</button>
-    <button class="btn ghost" id="pTxt">⌨️ 用打字描述</button></div>`);
+    <button class="btn fuel" id="pCam">${ico('cam')}拍照</button>
+    <button class="btn ghost" id="pLib">${ico('img')}從相簿上傳</button>
+    <button class="btn ghost" id="pBar">${ico('bar')}掃包裝條碼</button>
+    <button class="btn ghost" id="pTxt">${ico('key')}用打字記錄</button></div>`);
   document.getElementById('pBar').onclick=()=>openScanner(date);
   document.getElementById('pCam').onclick=()=>{closeSheet();document.getElementById('photo').click()};
   document.getElementById('pLib').onclick=()=>{closeSheet();document.getElementById('photoLib').click()};
@@ -899,9 +933,9 @@ function openCapture(blob,date){
   openSheet(`<h2>${blob?'辨識這一餐':'記錄這一餐'}</h2>
    ${blob?`<img class="preview" src="${URL.createObjectURL(blob)}" alt="你拍的餐點">`:''}
    <label class="f">${blob?'補充說明（辨識前、辨識後都可以寫）':'吃了什麼？（估算後也可以再補充）'}<textarea id="hint" rows="2" placeholder="${blob?'例如：飯只吃一半、飲料是無糖、那是雞腿不是排骨':'例如：雞腿便當、中杯無糖拿鐵'}"></textarea></label>
-   <div class="row"><button class="btn" id="goAI" ${sample?'':'hidden'}>${blob?'開始辨識':'估算熱量'}</button>
+   <div class="row"><button class="btn fuel" id="goAI" ${sample?'':'hidden'}>${blob?'開始辨識':'估算熱量'}</button>
    <button class="btn ghost" id="goManual">${sample?'自己輸入':'新增項目'}</button></div>
-   <button class="btn ghost" id="goTfnd" style="margin-top:8px">🏛️ 查食藥署食材熱量</button>
+   <button class="btn ghost" id="goTfnd" style="margin-top:8px">${ico('search')}查食藥署食材熱量</button>
    <div id="tfBox"></div>
    <div id="capOut"></div>`);
   document.getElementById('goTfnd').onclick=openTfndSearch;
@@ -941,7 +975,7 @@ ${hint?'使用者補充說明（優先採信）：'+hint:''}
 const SRC={tfnd:['🏛️','食藥署'],off:['🔖','條碼資料庫'],lib:['📦','商品庫'],label:['🏷️','營養標示'],brand:['🏪','品牌公布值'],est:['🤖','估算']};
 function showItems(note){
   const out=document.getElementById('capOut');
-  const g=document.getElementById('goAI'); if(g){g.disabled=false;g.textContent='🔄 依補充說明重新辨識'}
+  const g=document.getElementById('goAI'); if(g){g.disabled=false;g.className='btn ghost';g.textContent='依補充說明重新辨識'}
   const gm=document.getElementById('goManual'); if(gm)gm.textContent='＋ 新增項目';
   const tot=()=>draft.items.reduce((a,i)=>a+(+i.kcal||0),0);
   const hasEst=draft.items.some(i=>i.src==='est'||i.src==='brand');
@@ -1169,10 +1203,11 @@ function calView(){
   let sumK=0,n=0,okN=0;
   for(let d=1;d<=days;d++){
     const k=`${calMonth}-${String(d).padStart(2,'0')}`, v=local.days[k], kc=v?sum(v.meals).kcal:0, b=budget(k);
-    const st=!kc?'':kc>b?'red':kc>=b*.7?'green':'yellow';
+    const st=!kc?(k<today?'empty':''):kc>b?'red':kc>=b*.7?'green':'yellow';
+    const sym={green:'✓',yellow:'↓',red:'↑'}[st]||'';
     if(kc){sumK+=kc;n++;if(st==='green')okN++}
-    cells+=`<button class="cd ${st} ${k===today?'today':''} ${k===selDate?'sel':''} ${k>today?'future':''}" data-day="${k}" aria-label="${mo}月${d}日 ${kc?Math.round(kc)+'大卡':'無紀錄'}">
-      <span class="dn">${d}</span><span class="dk num">${kc?Math.round(kc):''}</span></button>`;
+    cells+=`<button class="cd ${st} ${k===today?'today':''} ${k===selDate?'sel':''} ${k>today?'future':''}" data-day="${k}" aria-label="${mo}月${d}日 ${kc?Math.round(kc)+'大卡，'+{green:'達標',yellow:'吃太少',red:'超標'}[st]:'無紀錄'}">
+      <span class="dn">${d}</span><span class="dk num">${kc?sym+' '+Math.round(kc):''}</span></button>`;
   }
   const sv=local.days[selDate], sk=sv?sum(sv.meals).kcal:0, sb=budget(selDate), sburn=+(sv?.burn)||0;
   const ymLabel=`${y} 年 ${mo} 月`;
@@ -1182,7 +1217,7 @@ function calView(){
     <button class="x big-x" id="calPrev" aria-label="上個月">‹</button><b>${ymLabel}</b><button class="x big-x" id="calNext" aria-label="下個月">›</button></div>
    <div class="cal wk">${'日一二三四五六'.split('').map(w=>`<div>${w}</div>`).join('')}</div>
    <div class="cal">${cells}</div>
-   <div class="legend"><span><i class="green"></i>達標</span><span><i class="yellow"></i>吃太少</span><span><i class="red"></i>超標</span></div>
+   <div class="legend"><span><i class="green">✓</i>達標</span><span><i class="yellow">↓</i>吃太少</span><span><i class="red">↑</i>超標</span><span><i class="empty"></i>沒記錄</span></div>
    ${n?`<div class="minirow" style="margin-top:8px"><span>本月記錄 ${n} 天・達標 ${okN} 天</span><b class="num">平均 ${Math.round(sumK/n)} 大卡</b></div>`:''}
   </section>
   <section class="panel">
@@ -1294,7 +1329,7 @@ function compView(){
     ${taunts}</section>
   <section class="panel"><h2>邀請朋友</h2>
     <p>把這個 App 分享給朋友，他們打開同一個連結就能加入同一場競賽。</p>
-    <div class="row"><button class="btn" id="inviteBtn">分享連結</button></div>
+    <div class="row"><button class="btn ghost" id="inviteBtn">分享連結</button></div>
     <p class="muted" style="margin-top:10px">朋友打開連結後用 Google 帳號登入。第一次會看到「還沒加入使用名單」，請他把 email 傳給${C.isOwner?"你，你在下面的「使用名單」加進去就好":"建立者加進名單"}。</p></section>
   ${C.isOwner?`<section class="panel"><h2>競賽設定</h2>
     <label class="f">名稱<input id="cTitle" value="${esc(cfg.title)}" maxlength="20"></label>
@@ -1342,7 +1377,7 @@ function bindComp(){
 
 // ---------- 匯出資料（搬家用） ----------
 function acctSection(){return `<section class="panel" style="margin-top:14px"><h2>帳號</h2>
-  <p class="muted">目前登入：${esc(fbUser?.email||'')}</p>
+  <p class="muted">目前登入：${esc(fbUser?.email||'')}。資料已同步到帳號，換手機也看得到。</p>
   <button class="btn ghost" id="impBtn">匯入舊資料</button>
   <button class="btn ghost" id="expBtn" style="margin-top:8px">複製我的資料（備份）</button>
   <button class="btn ghost" id="outBtn" style="margin-top:8px">登出</button></section>`}
@@ -1424,6 +1459,18 @@ function bodyChips(b){
   if(b.smm&&b.smm[2]!==b.smm[3]){const d=b.smm[1]-b.smm[0];o.push(`肌肉 ${ar(d,d>=0)}${Math.abs(d).toFixed(1)}kg</b>`)}
   return o.map(x=>`<span style="white-space:nowrap">${x}</span>`).join('　');
 }
+function bodyCard(){
+  const L=bodyList().filter(r=>r.w!=null),last=L[L.length-1],goal=+(local.profile&&local.profile.goal)||0;
+  if(!last)return `<button class="panel bcard" id="bodyCard"><div><h2 style="margin:0 0 4px">體重・InBody</h2><span class="muted">還沒有紀錄。量完體重或做完 InBody，點這裡記錄。</span></div>${ico('chev')}</button>`;
+  const cut=addDays(todayKey(),-60),S=L.filter(r=>r.date>=cut).slice(-30);
+  let spark='';if(S.length>1){const v=S.map(r=>r.w),a=Math.min(...v),b=Math.max(...v),rg=(b-a)||1;
+    spark=`<svg viewBox="0 0 100 32" class="spark" aria-hidden="true"><polyline points="${v.map((x,i)=>(i/(v.length-1)*100).toFixed(1)+','+(28-(x-a)/rg*24).toFixed(1)).join(' ')}"/></svg>`}
+  const toGo=goal?Math.round((last.w-goal)*10)/10:null, fat=bodyLatest('fat');
+  return `<button class="panel bcard" id="bodyCard"><div><h2 style="margin:0 0 2px">體重・InBody</h2>
+    <b class="num" style="font-size:26px">${last.w.toFixed(1)}</b><span class="muted"> kg　${toGo==null?'':toGo>0?'距離目標 '+toGo+' kg':'已達目標 🎉'}</span>
+    <div class="muted" style="font-size:12px">${last.date.slice(5).replace('-','/')} 記錄${fat?'　體脂 '+fat.fat+'%':''}</div></div>
+    <div class="row" style="gap:6px">${spark}${ico('chev')}</div></button>`;
+}
 function fmtB(k,v){const f=BFm[k];return v==null?'—':(+v).toFixed(f[3])+(f[2]?' '+f[2]:'')}
 function bodyChart(){
   const k=BODY.metric,f=BFm[k];let L=bodyList().filter(r=>r[k]!=null);
@@ -1456,7 +1503,7 @@ function bodyView(){
   const good=chg==null?null:chg*f[4]>=0;
   const latest=L[L.length-1];
   return `<button class="x" onclick="tab='today';render()" style="font-size:15px;padding:4px 0">‹ 回今天</button><h1>身體數據</h1>
-  <div class="row" style="gap:8px;margin-bottom:14px"><button class="btn fuel" id="bInbody">📷 拍 InBody 結果</button><button class="btn" id="bManual">✍️ 手動輸入</button></div>
+  <div class="row" style="gap:8px;margin-bottom:14px"><button class="btn fuel" id="bInbody">${ico('doc')}拍 InBody 結果</button><button class="btn ghost" id="bManual">${ico('pen')}手動輸入</button></div>
   ${L.length?`<section class="panel"><h2>趨勢</h2>
     <div class="chips">${has.map(x=>`<button class="chip ${x[0]===k?'on':''}" data-bm="${x[0]}">${x[1]}</button>`).join('')}</div>
     <div class="seg" id="bRange" style="margin:8px 0">${[[30,'1 個月'],[90,'3 個月'],[365,'1 年'],[0,'全部']].map(([v,t])=>`<button data-v="${v}" aria-pressed="${BODY.range===v}">${t}</button>`).join('')}</div>
@@ -1586,7 +1633,7 @@ async function lookupBarcode(code,date){
   if(!d.found||!d.per100){
     openSheet(`<h2>查不到這個商品</h2><p>${d.error?esc(d.error):d.found?'條碼資料庫有這個商品，但沒有熱量資料。':'條碼資料庫還沒收錄這個商品（台灣商品收錄比較少）。'}</p>
       <p class="muted">拍包裝背面的營養標示，AI 會直接讀上面的數字。存進商品庫後，下次就不用再拍。</p>
-      <button class="btn fuel" id="lbCam">📷 拍營養標示</button><button class="btn ghost" style="margin-top:8px" onclick="closeSheet()">取消</button>`);
+      <button class="btn fuel" id="lbCam">${ico('cam')}拍營養標示</button><button class="btn ghost" style="margin-top:8px" onclick="closeSheet()">取消</button>`);
     pendingDate=date;pendingBarcode=code;document.getElementById('lbCam').onclick=()=>{closeSheet();document.getElementById('photo').click()};return;
   }
   const g=d.productG||d.servingG||100, k=g/100, P=d.per100;
@@ -1662,7 +1709,7 @@ function libSection(){
      <input class="ti" id="libName" placeholder="品名，例如：左岸咖啡館 昂列奶茶" style="flex:1 1 100%">
      <input class="ti" id="libPortion" placeholder="份量，例如：1瓶" style="flex:1 1 40%">
      <input class="ti" id="libKcal" type="number" inputmode="numeric" placeholder="大卡" style="flex:1 1 25%">
-     <button class="btn" id="libAdd" style="flex:1 1 20%;width:auto">新增</button>
+     <button class="btn ghost" id="libAdd" style="flex:1 1 20%;width:auto">新增</button>
    </div>
    <input class="ti" id="libQ" placeholder="搜尋" style="width:100%;margin:12px 0 4px">
    <div id="libList">${libRows(L,'')}</div></section>`;
