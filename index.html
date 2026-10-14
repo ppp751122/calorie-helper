@@ -871,9 +871,9 @@ function makeThumb(blob){return new Promise(res=>{const url=URL.createObjectURL(
   img.onload=()=>{const S=200,m=Math.min(img.width,img.height);const c=document.createElement('canvas');c.width=c.height=S;
     c.getContext('2d').drawImage(img,(img.width-m)/2,(img.height-m)/2,m,m,0,0,S,S);URL.revokeObjectURL(url);res(c.toDataURL('image/jpeg',.6))};
   img.onerror=()=>{URL.revokeObjectURL(url);res('')};img.src=url})}
-let draft=null;
+let draft=null, pendingBarcode=null;
 function openCapture(blob,date){
-  draft={type:mealType(),items:[],blob,date:date||todayKey()};
+  draft={type:mealType(),items:[],blob,date:date||todayKey(),barcode:blob?pendingBarcode:null};pendingBarcode=null;
   if(blob)makeThumb(blob).then(t=>{if(draft&&draft.blob===blob)draft.thumb=t});
   openSheet(`<h2>${blob?'辨識這一餐':'記錄這一餐'}</h2>
    ${blob?`<img class="preview" src="${URL.createObjectURL(blob)}" alt="你拍的餐點">`:''}
@@ -932,7 +932,7 @@ function showItems(note){
    <button class="x" data-rm="${k}" aria-label="移除">×</button></div>`}).join('')}
    <div class="minirow"><span>這餐合計</span><b class="num" id="tot">${Math.round(tot())} 大卡</b></div>
    ${note?`<p class="muted">${esc(note)}</p>`:''}
-   <p class="muted">數字可以直接改。${hasEst?'🏪 和 🤖 的數字可能有誤差；如果你查到正確熱量，改好後按 ☆ 存進商品庫，以後拍到同一個商品就會直接用你的數字。':''}</p>
+   <p class="muted">數字可以直接改。🏷️ 營養標示、🏪 品牌公布值、🔖 條碼查到的商品，記錄後會自動存進商品庫，下次直接用。</p>
    <button class="btn fuel" id="saveMeal">記錄這餐</button>`;
   out.querySelectorAll('[data-k]').forEach(inp=>inp.oninput=()=>{const it=draft.items[inp.dataset.k];it.kcal=+inp.value||0;if(it.src==='lib'){it.src='edit'};document.getElementById('tot').textContent=Math.round(tot())+' 大卡'});
   out.querySelectorAll('[data-name]').forEach(inp=>{inp.oninput=()=>{draft.items[inp.dataset.name].name=inp.value};inp.onchange=()=>{const it=draft.items[inp.dataset.name];if(findFood(it.name)){applyLib(it,null);it.manual=false;showItems(note)}}});
@@ -968,6 +968,7 @@ function saveMeal(){
   // 從這裡開始已經記錄成功，後面任何一步出錯都不影響紀錄
   saving=false;
   const date=draft.date||todayKey();
+  autoLearn(draft.items.slice(),draft.barcode);
   try{showImpact(meal,k,before,before+k,c,date)}
   catch(e){
     console.error(e);
@@ -1408,21 +1409,34 @@ async function openScanner(date){
   }catch(e){if($('scanMsg'))$('scanMsg').textContent='開不了相機（'+errMsg(e)+'），可以直接輸入條碼數字。'}
 }
 async function lookupBarcode(code,date){
+  const mine=findBarcode(code);
+  if(mine){openCapture(null,date);draft.barcode=code;const it={name:mine.name,portion:'',kcal:0};applyLib(it,{lib:null});
+    if(it.src!=='lib')Object.assign(it,{portion:mine.portion||'1份',kcal:mine.kcal,protein_g:mine.protein_g||0,carbs_g:mine.carbs_g||0,fat_g:mine.fat_g||0,src:'lib',libId:mine.id});
+    draft.items.push(it);showItems('商品庫裡已經有這個商品。');return}
   openSheet(`<h2>查詢條碼 ${esc(code)}</h2><div class="thinking"><span class="dot"></span><span class="dot"></span><span class="dot"></span>查詢中…</div>`);
   let d;try{const r=await fetch('/api/off?code='+encodeURIComponent(code));d=await r.json()}catch(e){d={error:errMsg(e)}}
   if(!d.found||!d.per100){
     openSheet(`<h2>查不到這個商品</h2><p>${d.error?esc(d.error):d.found?'條碼資料庫有這個商品，但沒有熱量資料。':'條碼資料庫還沒收錄這個商品（台灣商品收錄比較少）。'}</p>
       <p class="muted">拍包裝背面的營養標示，AI 會直接讀上面的數字。存進商品庫後，下次就不用再拍。</p>
       <button class="btn fuel" id="lbCam">📷 拍營養標示</button><button class="btn ghost" style="margin-top:8px" onclick="closeSheet()">取消</button>`);
-    pendingDate=date;document.getElementById('lbCam').onclick=()=>{closeSheet();document.getElementById('photo').click()};return;
+    pendingDate=date;pendingBarcode=code;document.getElementById('lbCam').onclick=()=>{closeSheet();document.getElementById('photo').click()};return;
   }
   const g=d.productG||d.servingG||100, k=g/100, P=d.per100;
   openCapture(null,date);
   document.getElementById('hint').value=[d.brand,d.name].filter(Boolean).join(' ');
   draft.items.push({name:[d.brand,d.name].filter(Boolean).join(' ')||('條碼 '+code),portion:(d.quantity||Math.round(g)+'g')+(d.productG?'（整包）':d.servingG?'（1份）':'（100g）'),
     kcal:Math.round(P.kcal*k),protein_g:Math.round(P.p*k*10)/10,carbs_g:Math.round(P.c*k*10)/10,fat_g:Math.round(P.f*k*10)/10,emoji:'',src:'off',barcode:code});
+  draft.barcode=code;
   showItems(`每 100g ${Math.round(P.kcal)} 大卡。只吃一部分的話，直接改熱量數字。`);
 }
+// 自動學習：營養標示、品牌官方公布值、條碼資料庫查到的數字，記錄時自動存進共用商品庫
+async function autoLearn(items,barcode){
+  const ok=items.filter(i=>['label','brand','off'].includes(i.src)&&!i.libId&&(i.name||'').trim()&&+i.kcal>0&&!findFood(i.name));
+  if(barcode&&ok.length===1&&!ok[0].barcode)ok[0].barcode=barcode;
+  let n=0;for(const it of ok){if(await saveToLib(Object.assign({},it),true))n++}
+  if(n)setTimeout(()=>toast(`已把 ${n} 個商品的熱量存進商品庫，下次會直接用`),2600);
+}
+function findBarcode(code){return foodList().find(f=>f.barcode===code)||null}
 // ---------- 商品熱量庫 (shared food library) ----------
 const FOODS={list:[],sub:false};
 function foodsInit(){
@@ -1453,22 +1467,23 @@ function applyLib(item,r){
   return Object.assign(item,{name:f.name,portion:(q!==1?q+' × ':'')+(f.portion||'1份'),kcal:Math.round(f.kcal*q),
     protein_g:+(f.protein_g||0)*q,carbs_g:+(f.carbs_g||0)*q,fat_g:+(f.fat_g||0)*q,src:'lib',libId:f.id,qty:q});
 }
-async function saveToLib(item){
+async function saveToLib(item,quiet){
   const q=+item.qty>0?+item.qty:1;
   const doc={name:String(item.name||'').trim(),aliases:[],portion:String(item.libId?(findById(item.libId)?.portion||'1份'):(item.portion||'1份')),
     kcal:Math.round((+item.kcal||0)/q),protein_g:Math.round((+item.protein_g||0)/q*10)/10,carbs_g:Math.round((+item.carbs_g||0)/q*10)/10,fat_g:Math.round((+item.fat_g||0)/q*10)/10,
-    by:uid||'',at:Date.now()};
-  if(!doc.name||!doc.kcal){toast('名稱和熱量要先填好');return false}
+    by:uid||'',at:Date.now(),src:item.src&&item.src!=='lib'?item.src:(findById(item.libId)?.src||'manual')};
+  if(item.barcode||findById(item.libId)?.barcode)doc.barcode=item.barcode||findById(item.libId).barcode;
+  if(!doc.name||!doc.kcal){if(!quiet)toast('名稱和熱量要先填好');return false}
   if(db){
     try{
       if(item.libId){const old=findById(item.libId);if(old)doc.aliases=old.aliases||[];await db.doc('foods/'+item.libId).set(doc)}
       else{const ref=await db.collection('foods').add(doc);item.libId=ref.id}
-    }catch(e){toast('存不進商品庫，請檢查網路');return false}
+    }catch(e){if(!quiet)toast('存不進商品庫，請檢查網路');return false}
   }else{
     local.foods=(local.foods||[]).filter(f=>normName(f.name)!==normName(doc.name));
     item.libId='local'+Date.now(); local.foods.push(Object.assign({id:item.libId},doc)); saveLocal();
   }
-  item.src='lib'; toast('已存入商品庫，下次會直接用這個數字'); return true;
+  item.src='lib'; if(!quiet)toast('已存入商品庫，下次會直接用這個數字'); return true;
 }
 function findById(id){return foodList().find(f=>f.id===id)}
 function libSection(){
