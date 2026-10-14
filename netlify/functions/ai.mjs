@@ -2,7 +2,29 @@
 // 環境變數：ANTHROPIC_API_KEY、FIREBASE_PROJECT_ID（可選：MODEL_MAIN、MODEL_QUICK）
 const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json' } });
 
+const MAIN = () => Netlify.env.get('MODEL_MAIN') || 'claude-sonnet-5-5';
+const QUICK = () => Netlify.env.get('MODEL_QUICK') || 'claude-haiku-5-5';
+
+async function callClaude(key, req2) {
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify(req2),
+  });
+  return { r, d: await r.json().catch(() => ({})) };
+}
+
 export default async (req) => {
+  // 用 Safari 打開 /.netlify/functions/ai 就能檢查設定
+  if (req.method === 'GET') {
+    const key = Netlify.env.get('ANTHROPIC_API_KEY');
+    const out = { 金鑰: key ? '有設定' : '❌ 沒設定 ANTHROPIC_API_KEY', Firebase: Netlify.env.get('FIREBASE_PROJECT_ID') ? '有設定' : '❌ 沒設定 FIREBASE_PROJECT_ID', 辨識模型: MAIN() };
+    if (key) {
+      const { r, d } = await callClaude(key, { model: MAIN(), max_tokens: 5, messages: [{ role: 'user', content: 'hi' }] });
+      out.AI測試 = r.ok ? '✅ 正常' : '❌ ' + r.status + ' ' + (d?.error?.message || '');
+    }
+    return new Response(JSON.stringify(out, null, 2), { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
+  }
   if (req.method !== 'POST') return json({ error: '只接受 POST' }, 405);
   const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
   if (!token) return json({ error: '請先登入' }, 401);
@@ -23,9 +45,7 @@ export default async (req) => {
   const images = (Array.isArray(body.images) ? body.images : []).slice(0, 3)
     .filter(i => i && typeof i.data === 'string' && i.data.length < 4_000_000);
 
-  const model = body.tier === 'quick'
-    ? (Netlify.env.get('MODEL_QUICK') || 'claude-haiku-4-5-20251001')
-    : (Netlify.env.get('MODEL_MAIN') || 'claude-sonnet-4-6');
+  const model = body.tier === 'quick' ? QUICK() : MAIN();
 
   const req2 = {
     model,
@@ -41,15 +61,14 @@ export default async (req) => {
   };
   if (body.search) req2.tools = [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }];
 
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify(req2),
-  });
-  const d = await r.json().catch(() => ({}));
+  let { r, d } = await callClaude(key, req2);
+  if (!r.ok && req2.tools) { delete req2.tools; ({ r, d } = await callClaude(key, req2)); } // 上網查詢失敗就改不查
   if (!r.ok) {
     const msg = d?.error?.message || '';
     if (/credit balance/i.test(msg)) return json({ error: 'AI 額度用完了，請通知管理者到 Claude Console 儲值' }, 502);
+    if (r.status === 401) return json({ error: 'API 金鑰不對或已失效（401）' }, 502);
+    if (r.status === 403) return json({ error: 'API 金鑰沒有權限呼叫模型（403），請檢查金鑰的 Scope' }, 502);
+    if (r.status === 404) return json({ error: '找不到模型 ' + model + '（404）' }, 502);
     return json({ error: 'AI 服務錯誤：' + (msg || r.status) }, 502);
   }
   const text = (d.content || []).filter(c => c.type === 'text').map(c => c.text).join('');

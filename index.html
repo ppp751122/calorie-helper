@@ -70,6 +70,9 @@ label.f input,label.f select,textarea{display:block;width:100%;margin-top:4px;pa
 .meal{display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line)}
 .meal:first-of-type{border-top:0}
 .meal .t{font-weight:700}
+.mthumb{flex:none;width:48px;height:48px;padding:0;border:0;border-radius:10px;overflow:hidden;margin-right:10px;background:var(--line)}
+.mthumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb-big{display:block;width:min(100%,320px);aspect-ratio:1;object-fit:cover;border-radius:16px;margin:4px auto 10px}
 .meal .d{font-size:13px;color:var(--muted)}
 .meal .k{font-weight:700;white-space:nowrap}
 .x{border:0;background:transparent;color:var(--muted);padding:2px 6px;font-size:18px;line-height:1}
@@ -204,7 +207,7 @@ nav.tabs .cam svg{width:28px;height:28px}
 @media (prefers-reduced-motion:reduce){.stage.run .char .torso{transform:scale(var(--s1),1)}.headline{opacity:1;transform:none}}
 
 .pick{display:grid;gap:10px}
-.pl{display:grid;grid-template-columns:28px 44px 1fr auto;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.pl{display:grid;grid-template-columns:32px 1fr auto;gap:10px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}
 .pl:first-of-type{border-top:0}
 .pl.me{background:var(--bg);border-radius:12px;padding:8px 6px}
 .pl .rk{text-align:center;font-size:20px}
@@ -286,6 +289,7 @@ nav.tabs .cam svg{width:28px;height:28px}
 #gate .gate-in{max-width:340px;width:100%;text-align:center}
 #gate .gate-logo{font-size:64px;margin-bottom:6px}
 #gate p{line-height:1.7;margin:10px 0}
+.ph-empty{border:0;font:inherit;color:var(--muted);line-height:1.6;cursor:pointer}
 </style>
 </head>
 <body>
@@ -473,13 +477,10 @@ function photoCanvas(p,cls){
   requestAnimationFrame(()=>paint(0));
   return `<canvas id="${id}" class="pcv ${cls||''}" width="${PH.w}" height="${PH.h}" role="img" aria-label="你的照片，今日熱量 ${Math.round(p*100)}%"></canvas>`;
 }
-function usePhoto(){return local.profile?.who==='photo'&&PH.ready}
+function usePhoto(){return PH.ready}
 function heroFigure(pct){
-  if(local.profile?.who==='photo'){
-    if(PH.ready)return photoCanvas(pct,'hero-pc');
-    return `<div class="pcv ph-empty">${PH.url?'照片載入中…':'到「我的」上傳照片'}</div>`;
-  }
-  return charSVG(pct);
+  if(PH.ready)return photoCanvas(pct,'hero-pc');
+  return `<button class="pcv ph-empty" onclick="tab='settings';render();setTimeout(()=>document.getElementById('photoBox')?.scrollIntoView({behavior:'smooth'}),50)">${PH.url?'照片載入中…':'📷<br>點這裡上傳<br>你的照片'}</button>`;
 }
 // 照片版動畫
 function runPhotoStage(fromP,toP,st){
@@ -521,7 +522,6 @@ cheekL 是照片左邊那側的臉頰。`,{images:[blob],modelTier:'default'});
   return null;
 }
 function photoSection(){
-  if(local.profile?.who!=='photo')return '';
   return `<section class="panel" id="photoBox"><h2>我的照片</h2>
    ${PH.ready?`<p class="muted">✅ 首頁和每餐動畫都會用這張照片</p><div class="ph-wrap"><canvas id="phPrev" width="${PH.w}" height="${PH.h}"></canvas><span class="ph-hint">點臉的正中央可以重新定位</span></div>
    <label class="f" style="margin-top:10px">預覽：今天吃到目標的 <b id="phPct">130</b>%<input type="range" id="phSlider" min="40" max="180" value="130"></label>
@@ -544,7 +544,7 @@ function bindPhoto(){
       $('phUp').textContent='正在找你的臉…';
       const lm=await detectFace(blob);
       PH.url=url;PH.lm=lm||defaultLM(); await photoPrep(); savePhotoLocal(); savePhotoCloud();
-      if(local.profile.who!=='photo'){await saveProfile(Object.assign({},local.profile,{who:'photo'}))}
+      if(local.profile&&local.profile.who!=='photo'){await saveProfile(Object.assign({},local.profile,{who:'photo'}))}
       render();
       toast(lm?'找到臉了，可以拉下方滑桿預覽':'沒找到臉的位置，請點照片上臉的中央手動定位');
     }catch(err){toast('照片讀取失敗');render()}
@@ -564,7 +564,11 @@ function bindPhoto(){
 const LS='calorie-app-v1';
 let local={profile:null,days:{}};
 try{local=JSON.parse(localStorage.getItem(LS))||local}catch(e){}
-function saveLocal(){try{localStorage.setItem(LS,JSON.stringify(local))}catch(e){}}
+function saveLocal(){try{localStorage.setItem(LS,JSON.stringify(local))}catch(e){
+  // 手機空間不夠時，本機只保留最近 3 週的縮圖（雲端還是完整的）
+  try{const cut=(()=>{const d=new Date();d.setDate(d.getDate()-21);return todayKey(d)})();
+    const lite=JSON.parse(JSON.stringify(local));Object.values(lite.days||{}).forEach(d=>{if(d.date<cut)(d.meals||[]).forEach(m=>delete m.thumb)});
+    localStorage.setItem(LS,JSON.stringify(lite))}catch(e2){}}}
 let db=null, uid=null, sample=null, canImages=false;
 
 let fbUser=null, isOwnerUser=false;
@@ -582,9 +586,9 @@ function gate(mode,info){
   const $=id=>document.getElementById(id);
   if($('gLogin'))$('gLogin').onclick=async()=>{
     const pv=new firebase.auth.GoogleAuthProvider();pv.setCustomParameters({prompt:'select_account'});
-    try{await firebase.auth().signInWithPopup(pv)}
-    catch(e){if(/popup|cancelled-popup/.test(e.code||'')&&e.code!=='auth/popup-closed-by-user'){try{await firebase.auth().signInWithRedirect(pv)}catch(e2){$('gMsg').textContent='登入失敗：'+(e2.code||e2.message)}}
-      else if(e.code!=='auth/popup-closed-by-user')$('gMsg').textContent='登入失敗：'+(e.code||e.message)}};
+    $('gLogin').disabled=true;$('gLogin').textContent='登入中…';
+    try{await firebase.auth().signInWithRedirect(pv)}
+    catch(e){$('gLogin').disabled=false;$('gLogin').textContent='用 Google 登入';$('gMsg').textContent='登入失敗：'+(e.code||e.message)}};
   if($('gCopy'))$('gCopy').onclick=async()=>{try{await navigator.clipboard.writeText(info);toast('已複製')}catch(e){prompt('複製這個 email',info)}};
   if($('gRe'))$('gRe').onclick=()=>location.reload();
   if($('gOut'))$('gOut').onclick=()=>firebase.auth().signOut();
@@ -608,12 +612,16 @@ async function callAI(prompt,o,json){
 }
 async function cloudInit(){
   if(!window.firebase||!window.APP_CONFIG||!APP_CONFIG.firebase||!APP_CONFIG.firebase.apiKey){gate('err','設定檔 config.js 還沒填好 Firebase 設定。');return}
-  firebase.initializeApp(APP_CONFIG.firebase);
+  const fbCfg=Object.assign({},APP_CONFIG.firebase);
+  // 讓登入頁走自己的網址（搭配 _redirects），iPhone Safari 才不會登入失敗
+  if(/\.netlify\.app$|\.[a-z]{2,}$/.test(location.hostname)&&!/^(localhost|127\.)/.test(location.hostname))fbCfg.authDomain=location.hostname;
+  firebase.initializeApp(fbCfg);
   const auth=firebase.auth(), fdb=firebase.firestore();
   gate('load');
-  auth.getRedirectResult().catch(e=>console.warn(e));
+  let redirErr='';
+  auth.getRedirectResult().catch(e=>{redirErr=e.code||e.message;const m=document.getElementById('gMsg');if(m)m.textContent='登入失敗：'+redirErr});
   auth.onAuthStateChanged(async u=>{
-    if(!u){gate('login');return}
+    if(!u){gate('login');if(redirErr){const m=document.getElementById('gMsg');if(m)m.textContent='登入失敗：'+redirErr}return}
     const email=(u.email||'').toLowerCase();
     isOwnerUser=email===String(APP_CONFIG.ownerEmail||'').toLowerCase();
     let ok=isOwnerUser;
@@ -681,7 +689,7 @@ let tab='today';
 const app=document.getElementById('app');
 function render(){
   document.querySelectorAll('nav.tabs [data-tab]').forEach(b=>b.setAttribute('aria-current',b.dataset.tab===tab?'page':'false'));
-  if(!local.profile){app.innerHTML=setupView(true);bindSetup();return}
+  if(!local.profile){app.innerHTML=setupView(true);bindSetup();bindPhoto();return}
   if(tab==='today')app.innerHTML=todayView()+weekView();
   if(tab==='cal'){app.innerHTML=calView();bindCal()}
   if(tab==='comp'){app.innerHTML=compView();bindComp()}
@@ -784,6 +792,7 @@ function setupView(first){
   const c=calc(p);
   return `<h1>${first?'先設定你的基本資料':'我的資料'}</h1>
   <p class="muted">${first?'用來算出你每天需要多少熱量。資料只存在你的帳號裡。':''}</p>
+  ${first?photoSection():''}
   <section class="panel" id="setup">
     <label class="f">性別<div class="seg" data-k="sex"><button data-v="f" aria-pressed="${p.sex==='f'}">女</button><button data-v="m" aria-pressed="${p.sex==='m'}">男</button></div></label>
     <div class="row"><label class="f" style="flex:1">年齡<input type="number" inputmode="numeric" data-k="age" value="${p.age}"></label>
@@ -792,7 +801,6 @@ function setupView(first){
     <label class="f" style="flex:1">目標體重 kg<input type="number" inputmode="decimal" data-k="goal" value="${p.goal}"></label></div>
     <label class="f">平常活動量<select data-k="act">${ACT.map((a,i)=>`<option value="${i}" ${p.act==i?'selected':''}>${a.t}：${a.d}</option>`).join('')}</select></label>
     <label class="f">減重速度<div class="seg" data-k="pace">${PACE.map((a,i)=>`<button data-v="${i}" aria-pressed="${p.pace==i}">${a.t}<br><small>${a.kg} kg/週</small></button>`).join('')}</div></label>
-    <label class="f">你的角色<div class="seg" data-k="who"><button data-v="granny" aria-pressed="${p.who!=='grandpa'}">👵 婆婆</button><button data-v="grandpa" aria-pressed="${p.who==='grandpa'}">👴 爺爺</button><button data-v="photo" aria-pressed="${p.who==='photo'}">📷 我的照片</button></div></label>
     <label class="f">每餐評語模式<div class="seg" data-k="mode"><button data-v="soft" aria-pressed="${p.mode!=='savage'}">🫧 我是玻璃心<br><small>溫柔鼓勵</small></button><button data-v="savage" aria-pressed="${p.mode==='savage'}">🔥 不賤我不聽<br><small>毒舌吐槽</small></button></div></label>
   </section>
   <section class="panel" id="calcOut">${calcHtml(p,c)}</section>
@@ -813,7 +821,7 @@ function calcHtml(p,c){
 function bindSetup(){
   const el=document.getElementById('setup');
   const read=()=>{const p={};el.querySelectorAll('input[data-k],select[data-k]').forEach(i=>p[i.dataset.k]=+i.value);
-    el.querySelectorAll('.seg').forEach(s=>{const v=s.querySelector('[aria-pressed="true"]').dataset.v;p[s.dataset.k]=s.dataset.k==='pace'?+v:v});return p};
+    el.querySelectorAll('.seg').forEach(s=>{const v=s.querySelector('[aria-pressed="true"]').dataset.v;p[s.dataset.k]=s.dataset.k==='pace'?+v:v});p.who='photo';return p};
   const upd=()=>{const p=read();if(p.age&&p.h&&p.w)document.getElementById('calcOut').innerHTML=calcHtml(p,calc(p))};
   el.querySelectorAll('.seg button').forEach(b=>b.onclick=async e=>{e.preventDefault();b.parentNode.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed','false'));b.setAttribute('aria-pressed','true');upd();
     if(b.parentNode.dataset.k==='who'&&local.profile&&tab==='settings'){const p=read();if(p.age&&p.h&&p.w){await saveProfile(p);render();if(p.who==='photo')document.getElementById('photoBox')?.scrollIntoView({behavior:'smooth'})}}});
@@ -851,9 +859,15 @@ function shrink(file){return new Promise(res=>{const img=new Image();img.onload=
   const cv=document.createElement('canvas');cv.width=img.width*s;cv.height=img.height*s;cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
   cv.toBlob(b=>res(b||file),'image/jpeg',.85);URL.revokeObjectURL(img.src)};img.onerror=()=>res(file);img.src=URL.createObjectURL(file)})}
 
+// 餐點縮圖：裁成正方形 200px、低畫質 JPEG，每張約 8KB
+function makeThumb(blob){return new Promise(res=>{const url=URL.createObjectURL(blob);const img=new Image();
+  img.onload=()=>{const S=200,m=Math.min(img.width,img.height);const c=document.createElement('canvas');c.width=c.height=S;
+    c.getContext('2d').drawImage(img,(img.width-m)/2,(img.height-m)/2,m,m,0,0,S,S);URL.revokeObjectURL(url);res(c.toDataURL('image/jpeg',.6))};
+  img.onerror=()=>{URL.revokeObjectURL(url);res('')};img.src=url})}
 let draft=null;
 function openCapture(blob,date){
   draft={type:mealType(),items:[],blob,date:date||todayKey()};
+  if(blob)makeThumb(blob).then(t=>{if(draft&&draft.blob===blob)draft.thumb=t});
   openSheet(`<h2>${blob?'辨識這一餐':'記錄這一餐'}</h2>
    ${blob?`<img class="preview" src="${URL.createObjectURL(blob)}" alt="你拍的餐點">`:''}
    <label class="f">${blob?'補充說明（辨識前、辨識後都可以寫）':'吃了什麼？（估算後也可以再補充）'}<textarea id="hint" rows="2" placeholder="${blob?'例如：飯只吃一半、飲料是無糖、那是雞腿不是排骨':'例如：雞腿便當、中杯無糖拿鐵'}"></textarea></label>
@@ -887,7 +901,7 @@ ${hint?'使用者補充說明（優先採信）：'+hint:''}
     if(!draft.items.length){out.innerHTML='<p class="tip">照片裡看不出食物。換個角度再拍，或改用打字描述。</p>';document.getElementById('goAI').disabled=false;return}
     draft.note=r.note||''; showItems(draft.note); if(again)toast('已依補充說明重新辨識');
   }catch(e){
-    const msg=e.code==='not_granted'?'需要允許使用 Claude 才能辨識。也可以按「自己輸入」。':e.code==='rate_limited'?'用得太頻繁了，稍等一下再試。':'這次沒辨識成功，再試一次或改用自己輸入。';
+    const msg=e.code==='not_granted'?'需要允許使用 Claude 才能辨識。也可以按「自己輸入」。':e.code==='rate_limited'?'用得太頻繁了，稍等一下再試。':'沒辨識成功：'+esc(errMsg(e))+'<br>再試一次，或按「自己輸入」。';
     if(draft.items.length){showItems(draft.note||'');toast(msg)}
     else{out.innerHTML=`<p class="tip">${msg}</p>`;document.getElementById('goAI').disabled=false}
   }
@@ -933,6 +947,7 @@ function saveMeal(){
     const n=v=>Math.round((+v||0)*10)/10;
     meal={type:String(draft.type||mealType()),time:new Date().toTimeString().slice(0,5),
       items:items.map(i=>({name:String(i.name||'食物').trim()||'食物',portion:String(i.portion||''),kcal:Math.round(+i.kcal||0),protein_g:n(i.protein_g),carbs_g:n(i.carbs_g),fat_g:n(i.fat_g),emoji:String(i.emoji||'')}))};
+    if(draft.thumb)meal.thumb=draft.thumb;
     k=meal.items.reduce((a,i)=>a+i.kcal,0);
     step='寫入紀錄'; d.meals.push(meal); saveLocal();
   }catch(e){
@@ -1053,7 +1068,7 @@ function mealsList(k){
   const d=local.days[k]; const ms=d?.meals||[];
   if(!ms.length)return `<p class="muted">${k===todayKey()?'還沒有記錄。按下方黃色按鈕記錄第一餐。':'這天沒有記錄。'}</p>`;
   return ms.map((m,i)=>{const kc=m.items.reduce((a,x)=>a+(+x.kcal||0),0);
-    return `<div class="meal"><div><div class="t">${esc(m.type)} <span class="muted">${esc(m.time)}</span></div>
+    return `<div class="meal">${m.thumb?`<button class="mthumb" data-thumb="${k}|${i}" aria-label="看這餐的照片"><img src="${m.thumb}" alt=""></button>`:''}<div style="flex:1;min-width:0"><div class="t">${esc(m.type)} <span class="muted">${esc(m.time)}</span></div>
       <div class="d">${m.items.map(x=>esc(x.name)+' '+Math.round(+x.kcal||0)).join('、')}</div>${m.comment?`<div class="cm ${m.mode||''}">「${esc(m.comment)}」</div>`:''}</div>
       <div class="row" style="gap:2px"><span class="k num">${Math.round(kc)}</span>
       <button class="x" data-edit="${k}|${i}" aria-label="編輯這餐">✎</button><button class="x" data-del="${k}|${i}" aria-label="刪除這餐">×</button></div></div>`}).join('');
@@ -1063,14 +1078,16 @@ function bindMeals(root){
     const [k,i]=b.dataset.del.split('|'); if(!confirm('刪除這餐？'))return;
     day(k).meals.splice(+i,1); saveLocal(); render(); await saveDay(k);
   });
+  root.querySelectorAll('[data-thumb]').forEach(b=>b.onclick=()=>{const [k,i]=b.dataset.thumb.split('|');const m=day(k).meals[+i];if(!m)return;
+    openSheet(`<img class="thumb-big" src="${m.thumb}" alt="${esc(m.type)}的照片"><p class="muted" style="text-align:center">${esc(m.type)} ${esc(m.time)}　${m.items.map(x=>esc(x.name)).join('、')}</p><button class="btn" onclick="closeSheet()">關閉</button>`)});
   root.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{const [k,i]=b.dataset.edit.split('|');openEdit(k,+i)});
 }
 function openEdit(k,i){
   const m=day(k).meals[i]; if(!m)return;
-  const ed={type:m.type,time:m.time,items:m.items.map(x=>Object.assign({},x))};
+  const ed={type:m.type,time:m.time,items:m.items.map(x=>Object.assign({},x)),thumb:m.thumb||''};
   const draw=()=>{
     const tot=ed.items.reduce((a,x)=>a+(+x.kcal||0),0);
-    openSheet(`<h2>編輯這餐</h2>
+    openSheet(`<h2>編輯這餐</h2>${ed.thumb?`<div class="row" style="align-items:center;margin-bottom:8px"><img src="${ed.thumb}" alt="" style="width:56px;height:56px;border-radius:10px;object-fit:cover"><button class="btn ghost" id="eNoPic" style="width:auto">刪除照片</button></div>`:''}
      <div class="row"><label class="f" style="flex:1">餐別<select id="eType">${['早餐','午餐','點心','晚餐','宵夜'].map(t=>`<option ${t===ed.type?'selected':''}>${t}</option>`).join('')}</select></label>
      <label class="f" style="flex:1">時間<input type="time" id="eTime" value="${esc(ed.time)}"></label></div>
      ${ed.items.map((x,j)=>`<div class="item item3"><input data-en="${j}" value="${esc(x.name)}" placeholder="食物名稱" style="text-align:left"><input type="number" inputmode="numeric" data-ek="${j}" value="${Math.round(+x.kcal||0)}" aria-label="熱量"><button class="x" data-er="${j}" aria-label="移除">×</button></div>`).join('')}
@@ -1081,6 +1098,7 @@ function openEdit(k,i){
     sheet.querySelectorAll('[data-en]').forEach(inp=>inp.oninput=()=>{ed.items[inp.dataset.en].name=inp.value});
     sheet.querySelectorAll('[data-ek]').forEach(inp=>inp.oninput=()=>{ed.items[inp.dataset.ek].kcal=+inp.value||0;$('eTot').textContent=Math.round(ed.items.reduce((a,x)=>a+(+x.kcal||0),0))+' 大卡'});
     sheet.querySelectorAll('[data-er]').forEach(b=>b.onclick=()=>{ed.items.splice(+b.dataset.er,1);draw()});
+    if($('eNoPic'))$('eNoPic').onclick=()=>{ed.thumb='';draw()};
     $('eType').onchange=e=>ed.type=e.target.value; $('eTime').onchange=e=>ed.time=e.target.value;
     $('eAdd').onclick=()=>{ed.items.push({name:'',portion:'',kcal:0,protein_g:0,carbs_g:0,fat_g:0,emoji:''});draw()};
     $('eCancel').onclick=closeSheet;
@@ -1091,7 +1109,7 @@ function openEdit(k,i){
         // 熱量改了的話，蛋白質等依比例調整
         const orig=m.items;
         items.forEach(x=>{const o=orig.find(y=>y.name===x.name);if(o&&+o.kcal>0&&+x.kcal!==+o.kcal){const r=x.kcal/o.kcal;['protein_g','carbs_g','fat_g'].forEach(f=>x[f]=Math.round((+o[f]||0)*r*10)/10)}x.kcal=Math.round(+x.kcal||0);x.name=String(x.name||'食物').trim()||'食物'});
-        day(k).meals[i]=Object.assign({},m,{type:ed.type,time:ed.time,items});
+        const nm=Object.assign({},m,{type:ed.type,time:ed.time,items});if(!ed.thumb)delete nm.thumb;day(k).meals[i]=nm;
       }
       saveLocal(); closeSheet(); render(); toast('已更新'); await saveDay(k);
     };
@@ -1217,7 +1235,7 @@ function compView(){
   const board=rows.length?rows.map((r,i)=>{
     const st=r.todayP>1?'💥 爆卡':r.todayP>.85?'😰 快滿':r.todayP>0?'😎 穩':'💤 還沒記';
     const wl=r.p.shareWeight&&r.p.startW&&r.p.curW?((r.p.startW-r.p.curW)/r.p.startW*100):null;
-    return `<div class="pl ${r.p.id===uid?'me':''}"><div class="rk">${medal(i)}</div>${miniChar(r.todayP)}
+    return `<div class="pl ${r.p.id===uid?'me':''}"><div class="rk">${medal(i)}</div>
       <div class="who"><b>${esc(nameOf(r.p.id))}${r.p.id===uid?'（你）':''}</b>
       <span>${st}　連續達標 ${r.streak} 天${wl!=null?`　${wl>=0?'↓':'↑'}${Math.abs(wl).toFixed(1)}%`:''}</span></div>
       <div class="pts num">${r.pts}<small>分</small></div></div>`}).join('')
