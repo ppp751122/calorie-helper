@@ -898,7 +898,7 @@ async function runAI(){
 數值來源的優先順序（一定要照這個順序）：
 1. 商品熱量庫（下方若有提供）裡的商品 → 用庫裡的數值，source 填 "lib"。
 2. 照片裡看得到營養標示 → 直接讀標示的數字。台灣標示常寫「每一份量 X」「本包裝含 N 份」，整瓶/整包要乘上份數；只有「每100毫升/每100公克」時要乘上容量。source 填 "label"。
-3. 看得出品牌與品名的市售包裝商品、連鎖店飲品（超商、手搖飲、咖啡連鎖）→ 用該商品官方公布的營養標示數值，不要用一般同類飲品的平均值，品名要寫完整（品牌＋品名＋容量），source 填 "brand"。不確定是哪個品項時，在 note 說明。
+3. 看得出品牌與品名的市售包裝商品、連鎖店飲品（超商、手搖飲、咖啡連鎖）→ 用該商品官方公布的營養標示數值，不要用一般同類飲品的平均值，品名要寫完整（品牌＋品名＋容量），source 填 "brand"。不確定是哪個品項時，在 note 說明。看得出品牌（杯子、包裝、店名）但商品熱量庫沒有、照片也看不到營養標示時，用網路搜尋該品牌官方公布的營養資訊；自製或看不出品牌的食物不要搜尋。
 4. 其他自製或餐廳料理 → 依份量估算，source 填 "est"。
 ${libPromptBlock()}
 ${again?'上一次的辨識結果：'+draft.items.map(i=>`${i.name}(${i.portion||'份量未知'}) ${Math.round(+i.kcal||0)}大卡`).join('、')+'\\n請以使用者的補充說明為準，修正名稱、份量、熱量，或增減項目，再重新回傳完整清單。':''}
@@ -906,7 +906,7 @@ ${hint?'使用者補充說明（優先採信）：'+hint:''}
 只回傳 JSON，不要其他文字：{"items":[{"name":"品名(繁體中文、台灣用語；品牌商品寫品牌＋品名)","emoji":"一個最像它的食物emoji","portion":"份量，如 1瓶 290ml/1碗/約150g","kcal":數字,"protein_g":數字,"carbs_g":數字,"fat_g":數字,"source":"lib|label|brand|est","lib":"有用到庫才填 L編號","qty":份數,"g":估計重量公克數,"base":"只有當這項是單一種基本食材（例如白飯、地瓜、香蕉、水煮蛋、燙青菜）時，填它在台灣食品營養成分資料庫的常用名稱；混合料理、加工品、飲料一律留空字串"}],"note":"一句話說明不確定的地方"}
 若沒有食物，items 為空陣列。`;
   try{
-    const r=await sample.json(prompt,{images:draft.blob?[draft.blob]:undefined,modelTier:'default',search:!draft.blob});
+    const r=await sample.json(prompt,{images:draft.blob?[draft.blob]:undefined,modelTier:'default',search:true});
     await tfndLoad().catch(()=>{});
     draft.items=(r.items||[]).map(i=>applyTfnd(i)).map(i=>applyLib({emoji:i.emoji||'',name:i.name,portion:i.portion||'',kcal:Math.round(+i.kcal||0),protein_g:+i.protein_g||0,carbs_g:+i.carbs_g||0,fat_g:+i.fat_g||0,src:['label','brand','est','tfnd'].includes(i.source)?i.source:'est'},i));
     if(!draft.items.length){out.innerHTML='<p class="tip">照片裡看不出食物。換個角度再拍，或改用打字描述。</p>';document.getElementById('goAI').disabled=false;return}
