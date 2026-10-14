@@ -27,7 +27,7 @@ export default async () => {
       const id = x['整合編號'];
       const o = M[id] || (M[id] = {
         n: x['樣品名稱'], a: (x['俗名'] || '').trim(), g: x['食品分類'],
-        d: String(x['內容物描述'] || '').replace(/前處理描述:.*/, '').replace('樣品狀態:', '').replace(/[;；]\s*$/, '').trim(),
+        d: String(x['內容物描述'] || '').replace(/前處理描述:.*/, '').replace('樣品狀態:', '').replace(/[;；]\s*$/, '').trim().split(',').slice(0, 2).join(',').slice(0, 12),
       });
       const k = pick[x['分析項']];
       if (k && x['每100克含量'] != null) o[k] = +String(x['每100克含量']).trim();
