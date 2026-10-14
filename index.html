@@ -284,6 +284,12 @@ nav.tabs .cam svg{width:28px;height:28px}
 .ph-empty{width:150px;aspect-ratio:3/4;display:flex;align-items:center;justify-content:center;text-align:center;font-size:13px;color:var(--muted);background:var(--surface);padding:10px}
 [hidden]{display:none!important}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+.tf-row{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;padding:10px 2px;border:0;border-bottom:1px solid var(--line);background:none;font:inherit;color:inherit;text-align:left}
+.tf-row small{display:block;font-size:12px;color:var(--muted);font-weight:400}
+.tf-row .num{white-space:nowrap;font-weight:700}
+.scan-wrap{position:relative;border-radius:16px;overflow:hidden;background:#000;aspect-ratio:4/3;margin:6px 0}
+.scan-wrap video{width:100%;height:100%;object-fit:cover;display:block}
+.scan-line{position:absolute;left:12%;right:12%;top:50%;height:2px;background:var(--fuel,#f2b705);box-shadow:0 0 12px var(--fuel,#f2b705)}
 .lib-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);word-break:break-all}
 #gate{position:fixed;inset:0;z-index:999;background:var(--bg,#fff);display:flex;align-items:center;justify-content:center;padding:24px;padding-top:calc(24px + env(safe-area-inset-top,0px))}
 #gate .gate-in{max-width:340px;width:100%;text-align:center}
@@ -834,19 +840,20 @@ function bindSetup(){
 
 // ---------- capture flow ----------
 const wrap=document.getElementById('sheetWrap'), sheet=document.getElementById('sheet');
-function openSheet(html){sheet.innerHTML='<div class="grab"></div>'+html;wrap.classList.add('open')}
-function closeSheet(){wrap.classList.remove('open');sheet.innerHTML=''}
+function openSheet(html){if(typeof stopScan==='function'&&!/scanV/.test(html))stopScan();sheet.innerHTML='<div class="grab"></div>'+html;wrap.classList.add('open')}
+function closeSheet(){if(typeof stopScan==='function')stopScan();wrap.classList.remove('open');sheet.innerHTML=''}
 wrap.addEventListener('click',e=>{if(e.target===wrap)closeSheet()});
 
 let pendingDate=null;
 document.getElementById('camBtn').onclick=()=>{if(!local.profile){toast('先完成基本資料');return}openChooser(todayKey())};
 function openChooser(date){
   pendingDate=date;
-  if(!(sample&&canImages)){openCapture(null,date);return}
   openSheet(`<h2>${date===todayKey()?'記錄這一餐':'補記 '+date.slice(5).replace('-','/')+' 的一餐'}</h2><div class="pick">
     <button class="btn fuel" id="pCam">📷 拍照</button>
     <button class="btn" id="pLib">🖼️ 從相簿上傳</button>
+    <button class="btn" id="pBar">🔖 掃包裝條碼</button>
     <button class="btn ghost" id="pTxt">⌨️ 用打字描述</button></div>`);
+  document.getElementById('pBar').onclick=()=>openScanner(date);
   document.getElementById('pCam').onclick=()=>{closeSheet();document.getElementById('photo').click()};
   document.getElementById('pLib').onclick=()=>{closeSheet();document.getElementById('photoLib').click()};
   document.getElementById('pTxt').onclick=()=>openCapture(null,date);
@@ -873,7 +880,10 @@ function openCapture(blob,date){
    <label class="f">${blob?'補充說明（辨識前、辨識後都可以寫）':'吃了什麼？（估算後也可以再補充）'}<textarea id="hint" rows="2" placeholder="${blob?'例如：飯只吃一半、飲料是無糖、那是雞腿不是排骨':'例如：雞腿便當、中杯無糖拿鐵'}"></textarea></label>
    <div class="row"><button class="btn" id="goAI" ${sample?'':'hidden'}>${blob?'開始辨識':'估算熱量'}</button>
    <button class="btn ghost" id="goManual">${sample?'自己輸入':'新增項目'}</button></div>
+   <button class="btn ghost" id="goTfnd" style="margin-top:8px">🏛️ 查食藥署食材熱量</button>
+   <div id="tfBox"></div>
    <div id="capOut"></div>`);
+  document.getElementById('goTfnd').onclick=openTfndSearch;
   document.getElementById('goAI').onclick=runAI;
   document.getElementById('goManual').onclick=()=>{const h=draft.items.length?'':document.getElementById('hint').value.trim();const it={name:h,portion:'',kcal:0,protein_g:0,carbs_g:0,fat_g:0,manual:true};if(findFood(h)){applyLib(it,null);it.manual=false}draft.items.push(it);showItems(draft.note||'')};
 }
@@ -893,11 +903,12 @@ async function runAI(){
 ${libPromptBlock()}
 ${again?'上一次的辨識結果：'+draft.items.map(i=>`${i.name}(${i.portion||'份量未知'}) ${Math.round(+i.kcal||0)}大卡`).join('、')+'\\n請以使用者的補充說明為準，修正名稱、份量、熱量，或增減項目，再重新回傳完整清單。':''}
 ${hint?'使用者補充說明（優先採信）：'+hint:''}
-只回傳 JSON，不要其他文字：{"items":[{"name":"品名(繁體中文、台灣用語；品牌商品寫品牌＋品名)","emoji":"一個最像它的食物emoji","portion":"份量，如 1瓶 290ml/1碗/約150g","kcal":數字,"protein_g":數字,"carbs_g":數字,"fat_g":數字,"source":"lib|label|brand|est","lib":"有用到庫才填 L編號","qty":份數}],"note":"一句話說明不確定的地方"}
+只回傳 JSON，不要其他文字：{"items":[{"name":"品名(繁體中文、台灣用語；品牌商品寫品牌＋品名)","emoji":"一個最像它的食物emoji","portion":"份量，如 1瓶 290ml/1碗/約150g","kcal":數字,"protein_g":數字,"carbs_g":數字,"fat_g":數字,"source":"lib|label|brand|est","lib":"有用到庫才填 L編號","qty":份數,"g":估計重量公克數,"base":"只有當這項是單一種基本食材（例如白飯、地瓜、香蕉、水煮蛋、燙青菜）時，填它在台灣食品營養成分資料庫的常用名稱；混合料理、加工品、飲料一律留空字串"}],"note":"一句話說明不確定的地方"}
 若沒有食物，items 為空陣列。`;
   try{
     const r=await sample.json(prompt,{images:draft.blob?[draft.blob]:undefined,modelTier:'default',search:!draft.blob});
-    draft.items=(r.items||[]).map(i=>applyLib({emoji:i.emoji||'',name:i.name,portion:i.portion||'',kcal:Math.round(+i.kcal||0),protein_g:+i.protein_g||0,carbs_g:+i.carbs_g||0,fat_g:+i.fat_g||0,src:['label','brand','est'].includes(i.source)?i.source:'est'},i));
+    await tfndLoad().catch(()=>{});
+    draft.items=(r.items||[]).map(i=>applyTfnd(i)).map(i=>applyLib({emoji:i.emoji||'',name:i.name,portion:i.portion||'',kcal:Math.round(+i.kcal||0),protein_g:+i.protein_g||0,carbs_g:+i.carbs_g||0,fat_g:+i.fat_g||0,src:['label','brand','est','tfnd'].includes(i.source)?i.source:'est'},i));
     if(!draft.items.length){out.innerHTML='<p class="tip">照片裡看不出食物。換個角度再拍，或改用打字描述。</p>';document.getElementById('goAI').disabled=false;return}
     draft.note=r.note||''; showItems(draft.note); if(again)toast('已依補充說明重新辨識');
   }catch(e){
@@ -906,7 +917,7 @@ ${hint?'使用者補充說明（優先採信）：'+hint:''}
     else{out.innerHTML=`<p class="tip">${msg}</p>`;document.getElementById('goAI').disabled=false}
   }
 }
-const SRC={lib:['📦','商品庫'],label:['🏷️','營養標示'],brand:['🏪','品牌公布值'],est:['🤖','估算']};
+const SRC={tfnd:['🏛️','食藥署'],off:['🔖','條碼資料庫'],lib:['📦','商品庫'],label:['🏷️','營養標示'],brand:['🏪','品牌公布值'],est:['🤖','估算']};
 function showItems(note){
   const out=document.getElementById('capOut');
   const g=document.getElementById('goAI'); if(g){g.disabled=false;g.textContent='🔄 依補充說明重新辨識'}
@@ -1325,6 +1336,92 @@ function bindAcct(){const $=id=>document.getElementById(id);
       saveLocal();syncPlayer();closeSheet();toast(`匯入完成：${n} 天紀錄、${f} 個商品`);render();
     };
   };
+}
+
+// ---------- 食藥署食品營養成分資料（每 100g）----------
+const TF={list:null,p:null};
+function tfndLoad(){
+  if(TF.list)return Promise.resolve(TF.list);
+  if(!TF.p)TF.p=(async()=>{
+    try{const c=JSON.parse(localStorage.getItem('tfnd-v1')||'null');if(c&&c.at>Date.now()-30*864e5&&c.list.length){TF.list=c.list;return TF.list}}catch(e){}
+    const r=await fetch('/api/tfnd');const d=await r.json();if(!Array.isArray(d))throw new Error(d.error||'讀取失敗');
+    TF.list=d;try{localStorage.setItem('tfnd-v1',JSON.stringify({at:Date.now(),list:d}))}catch(e){}
+    return d})().catch(e=>{TF.p=null;throw e});
+  return TF.p;
+}
+function tfndSearch(q){
+  const n=normName(q);if(!n||!TF.list)return[];
+  const out=[];for(const f of TF.list){const nm=normName(f[0]),al=String(f[1]).split(/[,，、]/).map(normName);
+    let sc=nm===n?100:al.includes(n)?90:nm.startsWith(n)?70:nm.includes(n)?50:al.some(a=>a&&a.includes(n))?40:0;
+    if(sc){if(/熟|煮|蒸|烤|炒/.test(f[3]))sc+=5;out.push([sc,f])}}
+  return out.sort((a,b)=>b[0]-a[0]||a[1][0].length-b[1][0].length).slice(0,25).map(x=>x[1]);
+}
+function tfndItem(f,g){const k=g/100;return{name:f[0]+(f[3]?`（${f[3]}）`:''),portion:Math.round(g)+'g',kcal:Math.round(f[4]*k),
+  protein_g:Math.round(f[5]*k*10)/10,carbs_g:Math.round(f[6]*k*10)/10,fat_g:Math.round(f[7]*k*10)/10,emoji:'',src:'tfnd'}}
+function applyTfnd(i){
+  // AI 判斷是單一基本食材時，改用食藥署的官方數值計算
+  if(!TF.list||!i||!i.base||!(+i.g>0)||(i.source&&i.source!=='est'))return i;
+  const n=normName(i.base);
+  const hit=TF.list.filter(f=>normName(f[0])===n||String(f[1]).split(/[,，、]/).map(normName).includes(n));
+  if(!hit.length)return i;
+  const f=hit.find(x=>/熟|煮|蒸|烤|炒/.test(x[3]))||hit[0], t=tfndItem(f,+i.g);
+  return Object.assign({},i,{kcal:t.kcal,protein_g:t.protein_g,carbs_g:t.carbs_g,fat_g:t.fat_g,portion:(i.portion?i.portion+'，':'')+'約'+Math.round(+i.g)+'g',source:'tfnd'});
+}
+function openTfndSearch(){
+  const box=document.getElementById('tfBox');if(!box)return;
+  box.innerHTML=`<div class="panel" style="margin:10px 0;padding:12px"><input class="ti" id="tfQ" placeholder="輸入食材，例如：地瓜、雞胸肉、白飯" style="width:100%">
+    <div id="tfRes"><p class="muted">載入資料中…</p></div></div>`;
+  const q=document.getElementById('tfQ'),res=document.getElementById('tfRes');
+  const hint=document.getElementById('hint');if(hint&&hint.value.trim()&&!draft.items.length)q.value=hint.value.trim().split(/[\s,，、]/)[0];
+  const draw=()=>{const L=tfndSearch(q.value);
+    res.innerHTML=!q.value.trim()?'<p class="muted">共 '+TF.list.length+' 種食材，數值是每 100 公克。</p>':L.length?L.map((f,i)=>`<button class="tf-row" data-tf="${i}"><span><b>${esc(f[0])}</b>${f[3]?`<small>${esc(f[3])}</small>`:''}</span><span class="num">${f[4]}<small> 大卡/100g</small></span></button>`).join(''):'<p class="muted">找不到，換個說法試試（例如「番薯」改「地瓜」）。</p>';
+    res.querySelectorAll('[data-tf]').forEach(b=>b.onclick=()=>{const f=L[+b.dataset.tf];
+      res.innerHTML=`<p><b>${esc(f[0])}</b>${f[3]?'（'+esc(f[3])+'）':''}：每 100g ${f[4]} 大卡</p>
+        <div class="row"><input class="ti" id="tfG" type="number" inputmode="decimal" value="100" aria-label="吃了幾公克"><span style="align-self:center">公克</span><button class="btn fuel" id="tfAdd" style="width:auto">加入</button></div>
+        <p class="muted">一碗白飯約 160g、一個拳頭大的地瓜約 150g、一片雞胸肉約 120g。</p>`;
+      document.getElementById('tfG').select();
+      document.getElementById('tfAdd').onclick=()=>{const g=+document.getElementById('tfG').value;if(!(g>0)){toast('填吃了幾公克');return}
+        draft.items.push(tfndItem(f,g));box.innerHTML='';showItems(draft.note||'')};
+    })};
+  tfndLoad().then(()=>{draw();q.oninput=draw;q.focus()}).catch(e=>{res.innerHTML='<p class="tip">食藥署資料載入失敗：'+esc(errMsg(e))+'</p>'});
+}
+
+// ---------- 掃條碼（Open Food Facts）----------
+let scanReader=null;
+function loadScript(src){return new Promise((res,rej)=>{if(document.querySelector(`script[src="${src}"]`))return res();const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>rej(new Error('條碼掃描元件載入失敗'));document.head.appendChild(s)})}
+function stopScan(){try{scanReader&&scanReader.reset()}catch(e){}scanReader=null}
+async function openScanner(date){
+  openSheet(`<h2>掃包裝條碼</h2><div class="scan-wrap"><video id="scanV" playsinline muted></video><div class="scan-line"></div></div>
+    <p class="muted" id="scanMsg">把條碼對準框框中間</p>
+    <div class="row"><input class="ti" id="barIn" inputmode="numeric" placeholder="或直接輸入條碼數字"><button class="btn" id="barGo" style="width:auto">查詢</button></div>
+    <button class="btn ghost" style="margin-top:8px" id="scanX">取消</button>`);
+  const $=id=>document.getElementById(id);
+  const done=code=>{stopScan();lookupBarcode(code,date)};
+  $('scanX').onclick=()=>{stopScan();closeSheet()};
+  $('barGo').onclick=()=>{const c=$('barIn').value.replace(/\D/g,'');if(c.length<8){toast('條碼數字不對');return}done(c)};
+  try{
+    await loadScript('https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js');
+    const Z=window.ZXing,hints=new Map();
+    hints.set(Z.DecodeHintType.POSSIBLE_FORMATS,[Z.BarcodeFormat.EAN_13,Z.BarcodeFormat.EAN_8,Z.BarcodeFormat.UPC_A,Z.BarcodeFormat.UPC_E]);
+    scanReader=new Z.BrowserMultiFormatReader(hints);
+    await scanReader.decodeFromConstraints({video:{facingMode:'environment'}},$('scanV'),(r)=>{if(r&&scanReader){navigator.vibrate?.(60);done(r.getText())}});
+  }catch(e){if($('scanMsg'))$('scanMsg').textContent='開不了相機（'+errMsg(e)+'），可以直接輸入條碼數字。'}
+}
+async function lookupBarcode(code,date){
+  openSheet(`<h2>查詢條碼 ${esc(code)}</h2><div class="thinking"><span class="dot"></span><span class="dot"></span><span class="dot"></span>查詢中…</div>`);
+  let d;try{const r=await fetch('/api/off?code='+encodeURIComponent(code));d=await r.json()}catch(e){d={error:errMsg(e)}}
+  if(!d.found||!d.per100){
+    openSheet(`<h2>查不到這個商品</h2><p>${d.error?esc(d.error):d.found?'條碼資料庫有這個商品，但沒有熱量資料。':'條碼資料庫還沒收錄這個商品（台灣商品收錄比較少）。'}</p>
+      <p class="muted">拍包裝背面的營養標示，AI 會直接讀上面的數字。存進商品庫後，下次就不用再拍。</p>
+      <button class="btn fuel" id="lbCam">📷 拍營養標示</button><button class="btn ghost" style="margin-top:8px" onclick="closeSheet()">取消</button>`);
+    pendingDate=date;document.getElementById('lbCam').onclick=()=>{closeSheet();document.getElementById('photo').click()};return;
+  }
+  const g=d.productG||d.servingG||100, k=g/100, P=d.per100;
+  openCapture(null,date);
+  document.getElementById('hint').value=[d.brand,d.name].filter(Boolean).join(' ');
+  draft.items.push({name:[d.brand,d.name].filter(Boolean).join(' ')||('條碼 '+code),portion:(d.quantity||Math.round(g)+'g')+(d.productG?'（整包）':d.servingG?'（1份）':'（100g）'),
+    kcal:Math.round(P.kcal*k),protein_g:Math.round(P.p*k*10)/10,carbs_g:Math.round(P.c*k*10)/10,fat_g:Math.round(P.f*k*10)/10,emoji:'',src:'off',barcode:code});
+  showItems(`每 100g ${Math.round(P.kcal)} 大卡。只吃一部分的話，直接改熱量數字。`);
 }
 // ---------- 商品熱量庫 (shared food library) ----------
 const FOODS={list:[],sub:false};
