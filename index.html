@@ -1394,7 +1394,7 @@ function bindComp(){
   if($('cSave'))$('cSave').onclick=async()=>{
     const c={title:$('cTitle').value.trim()||'減脂大作戰',start:$('cStart').value,end:$('cEnd').value};
     if(!c.start||!c.end||c.end<c.start){toast('日期不對');return}
-    try{await db.doc('comp/config').set(c);toast('已儲存')}catch(e){toast('儲存失敗')}
+    try{await db.doc('comp/config').set(Object.assign({},C.config||{},c));toast('已儲存')}catch(e){toast('儲存失敗')}
   };
   const saveAllow=async list=>{try{await db.doc('config/allow').set({emails:list});toast('名單已更新')}catch(e){toast('名單儲存失敗')}};
   if($('allowBtn'))$('allowBtn').onclick=()=>{const e=$('allowIn').value.trim().toLowerCase();
@@ -1463,18 +1463,29 @@ function healthSection(){
   <p class="muted">網頁 App 沒辦法直接讀 iPhone 健康資料，要靠「捷徑」轉送。設定一次就好，之後每天自動帶入運動消耗。</p>
   ${t?`<div class="minirow" style="border:0"><span>上次同步</span><b>${local.healthAt?new Date(local.healthAt).toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'還沒有'}</b></div>
   <div class="row" style="margin:6px 0 10px"><button class="btn ghost" id="hpNow">檢查有沒有新資料</button></div>
-  <div class="steps">
-   <p class="hub-h">① 建捷徑（3 個動作）</p>
+  ${C.config&&C.config.shortcutUrl?`<div class="steps">
+   <p class="hub-h">① 安裝捷徑</p>
+   <button class="btn ghost" id="hpUrl">先複製我的同步網址</button>
+   <a class="btn fuel" style="display:block;text-align:center;text-decoration:none;margin-top:8px" href="${esc(C.config.shortcutUrl)}" target="_blank" rel="noopener">一鍵安裝「熱量同步」捷徑</a>
+   <p class="muted" style="margin-top:6px">安裝時會問「同步網址」，長按貼上剛剛複製的網址 → 加入捷徑。裝好後在捷徑 App 按一下測試，看到「已同步」就成功。</p>
+   <p class="hub-h">② 每天自動執行</p>
+   <p>捷徑 App 下方「自動化」→ ＋ →「特定時間」→ 21:30、每天 →「立即執行」→ 選「熱量同步」。</p>
+  </div>`:`<div class="steps">
+   <p class="hub-h">① 建捷徑（4 個動作，只要做一次）</p>
    <ol>
-    <li>打開「捷徑」App，右上角 ＋，搜尋並加入 <b>尋找健康樣本</b>，類型點成「活動能量」，再按「新增篩選條件」選「開始日期 是今天」</li>
+    <li>打開「捷徑」App，右上角 ＋，加入 <b>文字</b>，在文字框<b>貼上</b>同步網址（按下面黃色按鈕複製）</li>
+    <li>加入 <b>尋找健康樣本</b>，類型點成「活動能量」，按「新增篩選條件」選「開始日期 是今天」</li>
     <li>加入 <b>計算統計資料</b>，選「總和」</li>
-    <li>加入 <b>取得 URL 內容</b>，在網址欄位<b>貼上</b>下面複製的同步網址，游標停在最後，點鍵盤上方的「統計資料」</li>
+    <li>加入 <b>取得 URL 內容</b>，網址欄位點鍵盤上方先選「文字」，再選「統計資料」</li>
    </ol>
    <button class="btn fuel" id="hpUrl">複製同步網址</button>
-   <p class="muted" style="margin-top:6px">按捷徑右下角 ▶︎ 測試，看到「已同步」就成功。第一次會問能不能讀健康資料，選允許。</p>
+   <p class="muted" style="margin-top:6px">捷徑命名「熱量同步」，按右下角 ▶︎ 測試，看到「已同步」就成功。第一次會問能不能讀健康資料，選允許。</p>
    <p class="hub-h">② 每天自動執行</p>
-   <p>捷徑 App 下方「自動化」→ ＋ →「特定時間」→ 21:30、每天 →「立即執行」→ 選剛剛的捷徑。</p>
-  </div>`
+   <p>捷徑 App 下方「自動化」→ ＋ →「特定時間」→ 21:30、每天 →「立即執行」→ 選「熱量同步」。</p>
+   ${C.isOwner?`<p class="hub-h">③ 讓朋友一鍵安裝（選做）</p>
+   <p class="muted">捷徑做好後，長按它 → 分享 →「選項」→「設定匯入問題」勾第 1 個動作的文字，填「同步網址」→ 完成 →「拷貝 iCloud 連結」，貼到下面。朋友就會看到一鍵安裝按鈕，不用自己建。</p>
+   <div class="row"><input class="ti" id="scIn" inputmode="url" placeholder="https://www.icloud.com/shortcuts/..."><button class="btn" id="scSave" style="width:auto">儲存</button></div>`:''}
+  </div>`}`
   :`<button class="btn" id="hpOn">開始設定</button>`}
   </section>`;
 }
@@ -1483,6 +1494,8 @@ function bindHealth(){
   if($('hpOn'))$('hpOn').onclick=async()=>{await ensureHealthToken();render();setTimeout(()=>{const d=document.querySelector('#healthBox details');if(d)d.open=true;document.getElementById('healthBox')?.scrollIntoView({behavior:'smooth'})},60)};
   if($('hpUrl'))$('hpUrl').onclick=async()=>{const u=location.origin+'/api/health?token='+healthToken()+'&burn=';try{await navigator.clipboard.writeText(u);toast('已複製，貼到捷徑的網址欄位')}catch(e){prompt('長按複製同步網址',u)}};
   if($('hpCopy'))$('hpCopy').onclick=async()=>{try{await navigator.clipboard.writeText(healthToken());toast('已複製同步碼，貼到捷徑的 token 欄位')}catch(e){prompt('長按複製同步碼',healthToken())}};
+  if($('scSave'))$('scSave').onclick=async()=>{const u=$('scIn').value.trim();if(!/^https:\/\/www\.icloud\.com\/shortcuts\//.test(u)){toast('要貼 iCloud 捷徑連結（https://www.icloud.com/shortcuts/…）');return}
+    try{await db.doc('comp/config').set(Object.assign({},compCfg(),{shortcutUrl:u}));toast('已儲存，朋友會看到一鍵安裝按鈕')}catch(e){toast('儲存失敗')}};
   if($('hpNow'))$('hpNow').onclick=async()=>{const n=JSON.stringify(local.days);await healthPull();if(JSON.stringify(local.days)===n)toast('還沒收到資料，請先在捷徑按 ▶︎ 測試');render()};
 }
 // ---------- 身體數據（體重、InBody）----------
