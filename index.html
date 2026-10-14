@@ -43,6 +43,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
 .btn.fuel{background:var(--fuel);color:#1B1B10}
 .btn:disabled{opacity:.5}
+.steps ol{padding-left:20px;margin:4px 0 10px}.steps li{margin-bottom:6px;line-height:1.6}
 .hub{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .hub-h{font-size:13px;color:var(--muted);margin:14px 0 6px}
 .hub-h:first-of-type{margin-top:4px}
@@ -1457,36 +1458,32 @@ async function healthPull(){
   }catch(e){console.warn('health',e)}
 }
 function healthSection(){
-  const t=healthToken(),url=location.origin+'/api/health';
+  const t=healthToken();
   return `<section class="panel" id="healthBox"><h2>${ico('heart')} Apple 健康自動同步</h2>
-  <p class="muted">設定一次就好。之後 iPhone 每天會自動把「活動能量」和「體重」送過來，打開 App 就會帶入，不用再手動貼。</p>
+  <p class="muted">網頁 App 沒辦法直接讀 iPhone 健康資料，要靠「捷徑」轉送。設定一次就好，之後每天自動帶入運動消耗。</p>
   ${t?`<div class="minirow" style="border:0"><span>上次同步</span><b>${local.healthAt?new Date(local.healthAt).toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'還沒有'}</b></div>
-  <div class="row" style="margin:6px 0 10px"><button class="btn ghost" id="hpCopy">複製我的同步碼</button><button class="btn ghost" id="hpNow" style="width:auto;white-space:nowrap">立即同步</button></div>
-  <details class="howto"><summary>捷徑設定步驟（約 3 分鐘）</summary>
-  <p><b>A. 建立捷徑</b>：打開「捷徑」App → 右上角 ＋，依序加入：</p>
-  <ol>
-   <li><b>尋找健康樣本</b>：類型「活動能量」，篩選「開始日期」「是今天」</li>
-   <li><b>計算統計資料</b>：「總和」，輸入選上一步的「健康樣本」</li>
-   <li><b>設定變數</b>：名稱 <code>burn</code></li>
-   <li><b>尋找健康樣本</b>：類型「體重」，排序「開始日期」「最新優先」，限制「1」筆</li>
-   <li><b>設定變數</b>：名稱 <code>weight</code></li>
-   <li><b>取得 URL 內容</b>：網址填 <code>${esc(url)}</code>，展開後「方法」選 <b>POST</b>，「要求本文」選 <b>JSON</b>，新增 3 個文字欄位：
-     <br><code>token</code> ＝ 貼上同步碼
-     <br><code>burn</code> ＝ 選變數 burn
-     <br><code>weight</code> ＝ 選變數 weight</li>
-   <li><b>顯示結果</b>（測試用，之後可刪）</li>
-  </ol>
-  <p>捷徑命名「熱量同步」，按一次測試，看到「已同步」就成功了。第一次會問能不能讀取健康資料，選「允許」。</p>
-  <p><b>B. 設成每天自動執行</b>：捷徑 App 下方「自動化」→ ＋ →「特定時間」→ 選 <b>21:30</b>、「每天」→ 選「立即執行」並關掉「執行時通知」→ 下一步選「熱量同步」。</p>
-  <p class="muted">想更即時，可以再加一個 12:30 的自動化。同一天送多次，會以最後一次為準。</p></details>`
+  <div class="row" style="margin:6px 0 10px"><button class="btn ghost" id="hpNow">檢查有沒有新資料</button></div>
+  <div class="steps">
+   <p class="hub-h">① 建捷徑（3 個動作）</p>
+   <ol>
+    <li>打開「捷徑」App，右上角 ＋，搜尋並加入 <b>尋找健康樣本</b>，類型點成「活動能量」，再按「新增篩選條件」選「開始日期 是今天」</li>
+    <li>加入 <b>計算統計資料</b>，選「總和」</li>
+    <li>加入 <b>取得 URL 內容</b>，在網址欄位<b>貼上</b>下面複製的同步網址，游標停在最後，點鍵盤上方的「統計資料」</li>
+   </ol>
+   <button class="btn fuel" id="hpUrl">複製同步網址</button>
+   <p class="muted" style="margin-top:6px">按捷徑右下角 ▶︎ 測試，看到「已同步」就成功。第一次會問能不能讀健康資料，選允許。</p>
+   <p class="hub-h">② 每天自動執行</p>
+   <p>捷徑 App 下方「自動化」→ ＋ →「特定時間」→ 21:30、每天 →「立即執行」→ 選剛剛的捷徑。</p>
+  </div>`
   :`<button class="btn" id="hpOn">開始設定</button>`}
   </section>`;
 }
 function bindHealth(){
   const $=id=>document.getElementById(id);
   if($('hpOn'))$('hpOn').onclick=async()=>{await ensureHealthToken();render();setTimeout(()=>{const d=document.querySelector('#healthBox details');if(d)d.open=true;document.getElementById('healthBox')?.scrollIntoView({behavior:'smooth'})},60)};
+  if($('hpUrl'))$('hpUrl').onclick=async()=>{const u=location.origin+'/api/health?token='+healthToken()+'&burn=';try{await navigator.clipboard.writeText(u);toast('已複製，貼到捷徑的網址欄位')}catch(e){prompt('長按複製同步網址',u)}};
   if($('hpCopy'))$('hpCopy').onclick=async()=>{try{await navigator.clipboard.writeText(healthToken());toast('已複製同步碼，貼到捷徑的 token 欄位')}catch(e){prompt('長按複製同步碼',healthToken())}};
-  if($('hpNow'))$('hpNow').onclick=async()=>{await healthPull();toast('已檢查最新資料');render()};
+  if($('hpNow'))$('hpNow').onclick=async()=>{const n=JSON.stringify(local.days);await healthPull();if(JSON.stringify(local.days)===n)toast('還沒收到資料，請先在捷徑按 ▶︎ 測試');render()};
 }
 // ---------- 身體數據（體重、InBody）----------
 const BF=[['w','體重','kg',1,-1],['fat','體脂率','%',1,-1],['smm','骨骼肌重','kg',1,1],['fm','體脂肪重','kg',1,-1],['bmi','BMI','',1,-1],

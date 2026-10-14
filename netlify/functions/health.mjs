@@ -1,6 +1,7 @@
 // Apple 健康自動同步：iPhone「捷徑」每天自動把活動能量、體重送到這裡，App 打開時再取回
 // POST /api/health  { token, burn, weight, date? }   （數字可以帶單位，例如 "523 kcal"）
-// GET  /api/health?token=...&since=YYYY-MM-DD
+// GET  /api/health?token=...&burn=523  （捷徑最簡單的寫法：網址帶數字）
+// GET  /api/health?token=...&since=YYYY-MM-DD   （App 讀取）
 import { getStore } from '@netlify/blobs';
 
 const j = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json; charset=utf-8' } });
@@ -11,7 +12,8 @@ const twDate = () => new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10
 export default async (req) => {
   const store = getStore({ name: 'health', consistency: 'strong' });
   const url = new URL(req.url);
-  if (req.method === 'GET') {
+  const isWrite = req.method === 'POST' || ['burn', 'weight', 'steps'].some(k => url.searchParams.has(k));
+  if (req.method === 'GET' && !isWrite) {
     const token = url.searchParams.get('token');
     if (!okToken(token)) return j({ error: 'token 不對' }, 400);
     const since = url.searchParams.get('since') || '0000';
@@ -21,12 +23,14 @@ export default async (req) => {
     for (const k of keys) { const v = await store.get(k, { type: 'json' }); if (v) out.push(v); }
     return j({ entries: out });
   }
-  if (req.method !== 'POST') return j({ error: '只接受 GET / POST' }, 405);
+  if (!isWrite) return j({ error: '只接受 GET / POST' }, 405);
   let b = {};
   const ct = req.headers.get('content-type') || '';
   try {
-    if (ct.includes('json')) b = await req.json();
-    else { const f = await req.formData(); f.forEach((v, k) => { b[k] = v; }); }
+    if (req.method === 'POST') {
+      if (ct.includes('json')) b = await req.json();
+      else { const f = await req.formData(); f.forEach((v, k) => { b[k] = v; }); }
+    }
   } catch { }
   url.searchParams.forEach((v, k) => { if (b[k] == null) b[k] = v; });
   const token = String(b.token || '').trim().toLowerCase();
