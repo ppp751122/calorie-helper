@@ -64,6 +64,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .wlink{font-size:13px;padding:4px 0;color:var(--muted);text-decoration:underline;text-underline-offset:3px}
 .sheet .bottle{width:64px}
 @media (prefers-reduced-motion:reduce){.bt-wave,.bt-wave2{animation:none}.bt-water{transition:none}}
+.lkcode{display:flex;flex-direction:column;align-items:center;background:var(--bg);border-radius:14px;padding:12px;margin:10px 0}
+.lkcode b{font-size:32px;letter-spacing:4px}
+.gate-link{text-align:left;background:var(--surface);border-radius:16px;padding:12px 14px;margin-top:14px}
 .tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
 .tile{background:var(--surface);border-radius:16px;padding:12px 14px}
 .tile b{display:block;font-size:24px;line-height:1.2}
@@ -642,7 +645,8 @@ function saveLocal(){try{localStorage.setItem(LS,JSON.stringify(local))}catch(e)
     localStorage.setItem(LS,JSON.stringify(lite))}catch(e2){}}}
 let db=null, uid=null, sample=null, canImages=false;
 
-let fbUser=null, isOwnerUser=false;
+let fbUser=null, isOwnerUser=false, authUid=null;
+const LINK={pid:null,linked:false};
 function gate(mode,info){
   let g=document.getElementById('gate');
   if(!mode){if(g)g.remove();return}
@@ -651,7 +655,10 @@ function gate(mode,info){
   g.innerHTML=`<div class="gate-in"><div class="gate-logo">🍱</div><h1>熱量小幫手</h1>${
     mode==='login'?`<p>拍照算熱量、跟朋友比賽減脂。<br>用 Google 帳號登入就能開始。</p><button class="btn fuel" id="gLogin">用 Google 登入</button><p class="muted" id="gMsg"></p>`
    :mode==='wait'?`<p>你的帳號 <b>${esc2(info)}</b> 還沒加入使用名單。</p><p class="muted">把這個 email 傳給邀請你的人。他加進名單後，按「重新檢查」就能用。</p>
-      <button class="btn fuel" id="gCopy">複製我的 email</button><button class="btn ghost" id="gRe" style="margin-top:8px">重新檢查</button><button class="btn ghost" id="gOut" style="margin-top:8px">換一個帳號登入</button>`
+      <button class="btn fuel" id="gCopy">複製我的 email</button><button class="btn ghost" id="gRe" style="margin-top:8px">重新檢查</button>
+      <div class="gate-link"><p><b>已經用另一個 Google 帳號在用了？</b><br><span class="muted">在原本的裝置打開「我的 → 多帳號歸戶」產生連結碼，輸入後這個帳號就會跟原本的帳號共用同一份紀錄。</span></p>
+      <div class="row"><input class="ti" id="gCode" autocapitalize="characters" autocomplete="off" placeholder="8 碼連結碼" maxlength="9" style="text-transform:uppercase;letter-spacing:2px"><button class="btn" id="gLink" style="width:auto">歸戶</button></div><p class="muted" id="gLinkMsg"></p></div>
+      <button class="btn ghost" id="gOut" style="margin-top:8px">換一個帳號登入</button>`
    :mode==='load'?`<p class="muted">登入中…</p>`
    :`<p>${esc2(info)}</p>`}</div>`;
   const $=id=>document.getElementById(id);
@@ -663,6 +670,9 @@ function gate(mode,info){
   if($('gCopy'))$('gCopy').onclick=async()=>{try{await navigator.clipboard.writeText(info);toast('已複製')}catch(e){prompt('複製這個 email',info)}};
   if($('gRe'))$('gRe').onclick=()=>location.reload();
   if($('gOut'))$('gOut').onclick=()=>firebase.auth().signOut();
+  if($('gLink'))$('gLink').onclick=async()=>{const m=$('gLinkMsg');$('gLink').disabled=true;m.textContent='連結中…';
+    try{await linkWithCode($('gCode').value);m.textContent='完成，重新載入中…';setTimeout(()=>location.reload(),600)}
+    catch(e){m.textContent=errMsg(e);$('gLink').disabled=false}};
 }
 function blobToImg(blob){return new Promise((res,rej)=>{const url=URL.createObjectURL(blob);const img=new Image();
   img.onload=()=>{const m=1280,sc=Math.min(1,m/Math.max(img.width,img.height));const c=document.createElement('canvas');
@@ -695,20 +705,24 @@ async function cloudInit(){
     if(!u){gate('login');if(redirErr){const m=document.getElementById('gMsg');if(m)m.textContent='登入失敗：'+redirErr}return}
     const email=(u.email||'').toLowerCase();
     isOwnerUser=email===String(APP_CONFIG.ownerEmail||'').toLowerCase();
-    let ok=isOwnerUser;
+    authUid=u.uid; fbUser=u; LINK.pid=u.uid; LINK.linked=false;
+    try{const l=await fdb.doc('links/'+u.uid).get();if(l.exists&&l.data().pid){LINK.pid=l.data().pid;LINK.linked=true}}catch(e){}
+    if(LINK.linked&&!isOwnerUser){try{const o=await fdb.doc('config/owner').get();if(o.exists&&o.data().uid===LINK.pid)isOwnerUser=true}catch(e){}}
+    let ok=isOwnerUser||LINK.linked;
     if(!ok){try{const a=await fdb.doc('config/allow').get();ok=!!(a.exists&&(a.data().emails||[]).map(x=>String(x).toLowerCase()).includes(email))}catch(e){ok=false}}
     if(!ok){gate('wait',u.email);return}
+    if(email===String(APP_CONFIG.ownerEmail||'').toLowerCase())fdb.doc('config/owner').set({uid:u.uid}).catch(()=>{});
     gate(null);
     fbUser=u;
-    if(local.owner&&local.owner!==u.uid){local={profile:null,days:{}};try{localStorage.removeItem(PKEY)}catch(e){}}
-    local.owner=u.uid; saveLocal();
+    if(local.owner&&local.owner!==LINK.pid){local={profile:null,days:{}};try{localStorage.removeItem(PKEY)}catch(e){}}
+    local.owner=LINK.pid; saveLocal();
     sample=async(p,o={})=>{const t=await callAI(p,o,false);if(o.onText)o.onText({text:t});return{text:t}};
     sample.json=async(p,o={})=>parseJSONText(await callAI(p,o,true));
     canImages=true;
     userNs={isOwner:async()=>isOwnerUser,can:async()=>true,profiles:async ids=>{const out={};
       await Promise.all(ids.map(async i=>{try{const x=await fdb.doc('names/'+i).get();if(x.exists)out[i]={name:x.data().name}}catch(e){}}));return out}};
-    uid=u.uid; db=fdb;
-    fdb.doc('names/'+uid).set({name:u.displayName||email.split('@')[0]}).catch(()=>{});
+    uid=LINK.pid; db=fdb;
+    if(!LINK.linked)fdb.doc('names/'+uid).set({name:u.displayName||email.split('@')[0]}).catch(()=>{});
     compInit(); foodsInit(); photoCloudLoad(); render();
     try{
       const clone=o=>JSON.parse(JSON.stringify(o));
@@ -718,7 +732,7 @@ async function cloudInit(){
       else db.doc(`data/users/${uid}/profile`).set({profile:local.profile}).catch(()=>{})}
     else if(local.profile){await db.doc(`data/users/${uid}/profile`).set({profile:local.profile})}
     const days=await db.doc(`data/users/${uid}/profile`).collection('days').orderBy('date','desc').limit(14).get();
-    days.docs.forEach(x=>{if(x.exists){const v=clone(x.data());local.days[v.date]={date:v.date,meals:v.meals||[],burn:v.burn||0}}});
+    days.docs.forEach(x=>{if(x.exists){const v=clone(x.data());local.days[v.date]=Object.assign({},v,{meals:v.meals||[],burn:v.burn||0})}});
     saveLocal(); render(); photoCloudLoad(); bodyCloudLoad().then(healthPull).then(ping);
     }catch(e){console.warn('cloud',e)}
   });
@@ -1261,7 +1275,7 @@ async function loadMonth(ym){
   try{
     const q=await db.doc(`data/users/${uid}/profile`).collection('days').where('date','>=',ym+'-01').where('date','<=',ym+'-31').get();
     let changed=false;
-    q.docs.forEach(x=>{if(x.exists){const v=JSON.parse(JSON.stringify(x.data()));if(!local.days[v.date]||!local.days[v.date].meals.length){local.days[v.date]={date:v.date,meals:v.meals||[],burn:v.burn||0};changed=true}}});
+    q.docs.forEach(x=>{if(x.exists){const v=JSON.parse(JSON.stringify(x.data()));const cur=local.days[v.date];if(!cur||(!cur.meals.length&&!(cur.water||[]).length)){local.days[v.date]=Object.assign({},v,{meals:v.meals||[],burn:v.burn||0});changed=true}}});
     if(changed){saveLocal();if(tab==='cal')render()}
   }catch(e){loadedMonths.delete(ym)}
 }
@@ -1448,12 +1462,13 @@ function bindComp(){
 
 
 // ---------- 匯出資料（搬家用） ----------
-function acctSection(){return `${isOwnerUser?`<button class="panel bcard" id="adminCard" style="margin-top:14px"><div><h2 style="margin:0 0 2px">${ico('gear')} 管理者後台</h2><span class="muted">使用人數、活躍狀況、AI 花費</span></div>${ico('chev')}</button>`:''}<section class="panel" style="margin-top:14px"><h2>帳號</h2>
+function acctSection(){return `${isOwnerUser?`<button class="panel bcard" id="adminCard" style="margin-top:14px"><div><h2 style="margin:0 0 2px">${ico('gear')} 管理者後台</h2><span class="muted">使用人數、活躍狀況、AI 花費</span></div>${ico('chev')}</button>`:''}${linkSection()}<section class="panel" style="margin-top:14px"><h2>帳號</h2>
   <p class="muted">目前登入：${esc(fbUser?.email||'')}。資料已同步到帳號，換手機也看得到。</p>
   <button class="btn ghost" id="impBtn">匯入舊資料</button>
   <button class="btn ghost" id="expBtn" style="margin-top:8px">複製我的資料（備份）</button>
   <button class="btn ghost" id="outBtn" style="margin-top:8px">登出</button></section>`}
 function bindAcct(){const $=id=>document.getElementById(id);
+  bindLink();
   if($('adminCard'))$('adminCard').onclick=()=>{tab='admin';ADM.data=null;render();window.scrollTo(0,0)};
   if($('outBtn'))$('outBtn').onclick=()=>{if(confirm('確定登出？'))firebase.auth().signOut().then(()=>location.reload())};
   if($('expBtn'))$('expBtn').onclick=async()=>{const text='CALORIE-EXPORT-V1'+JSON.stringify({profile:local.profile,days:local.days,foods:foodList().map(f=>{const o=Object.assign({},f);delete o.id;return o})});
@@ -1547,6 +1562,84 @@ function openWater(k){
   WATER.shown.sheet=waterTotal(k)/waterGoal();draw();
 }
 
+
+// ---------- 多帳號歸戶 ----------
+// 每個人有一個 pid（第一個帳號的 uid）。其他帳號輸入連結碼後歸戶到同一個 pid，所有紀錄共用。
+const LK={code:null,exp:0,list:null,busy:false};
+const CODE_ABC='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+async function makeLinkCode(){
+  const a=new Uint8Array(8);crypto.getRandomValues(a);const code=[...a].map(x=>CODE_ABC[x%CODE_ABC.length]).join('');
+  const exp=Date.now()+10*60e3;
+  await db.doc('linkCodes/'+code).set({pid:uid,exp,by:authUid});
+  LK.code=code;LK.exp=exp;return code;
+}
+async function linkWithCode(raw){
+  const code=String(raw||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(code.length!==8)throw new Error('連結碼是 8 碼英數字');
+  const fdb=firebase.firestore(),me=firebase.auth().currentUser;
+  let c;try{c=await fdb.doc('linkCodes/'+code).get()}catch(e){throw new Error('查不到連結碼，請確認網路')}
+  if(!c.exists)throw new Error('連結碼不對，請再確認一次');
+  const {pid,exp}=c.data();
+  if(exp<Date.now())throw new Error('連結碼過期了，請在原本的裝置重新產生');
+  if(pid===me.uid)throw new Error('這是同一個帳號，不用歸戶');
+  await fdb.doc('links/'+me.uid).set({pid,code,email:(me.email||'').toLowerCase(),at:Date.now()});
+  await mergeOldData(fdb,me.uid,pid);
+  try{await fdb.doc('linkCodes/'+code).delete()}catch(e){}
+  try{localStorage.removeItem(LS)}catch(e){}
+  return pid;
+}
+// 這個帳號歸戶前自己的紀錄，合併進 pid（同一天的餐點不重複加入）
+async function mergeOldData(fdb,from,pid){
+  const src=fdb.doc(`data/users/${from}/profile`),dst=fdb.doc(`data/users/${pid}/profile`);
+  try{
+    const days=await src.collection('days').get();
+    for(const x of days.docs){if(!x.exists)continue;const v=JSON.parse(JSON.stringify(x.data()));
+      const cur=await dst.collection('days').doc(v.date).get();const c=cur.exists?JSON.parse(JSON.stringify(cur.data())):{date:v.date,meals:[]};
+      const sig=m=>(m.time||'')+'|'+(m.items||[]).map(i=>i.name+i.kcal).join(',');
+      const have=new Set((c.meals||[]).map(sig));
+      c.meals=(c.meals||[]).concat((v.meals||[]).filter(m=>!have.has(sig(m))));
+      const ws=new Set((c.water||[]).map(w=>w.t+'|'+w.ml));c.water=(c.water||[]).concat((v.water||[]).filter(w=>!ws.has(w.t+'|'+w.ml)));
+      c.burn=Math.max(+c.burn||0,+v.burn||0);
+      await dst.collection('days').doc(v.date).set(c)}
+    const body=await src.collection('body').get();
+    for(const x of body.docs){if(x.exists)await dst.collection('body').doc(x.id).set(JSON.parse(JSON.stringify(x.data())))}
+    const p=await dst.get();if(!p.exists){const op=await src.get();if(op.exists)await dst.set(JSON.parse(JSON.stringify(op.data())))}
+  }catch(e){console.warn('merge',e)}
+  try{await fdb.doc('players/'+from).delete()}catch(e){}
+}
+async function loadLinks(){
+  try{const q=await db.collection('links').where('pid','==',uid).get();
+    LK.list=q.docs.filter(d=>d.exists).map(d=>Object.assign({uid:d.id},d.data()))}catch(e){LK.list=[]}
+  if(tab==='settings')render();
+}
+function linkSection(){
+  if(LK.list==null)loadLinks();
+  const me=(fbUser&&fbUser.email)||'';
+  const left=LK.code?Math.max(0,Math.ceil((LK.exp-Date.now())/60e3)):0;
+  const others=(LK.list||[]).filter(l=>l.uid!==authUid);
+  return `<section class="panel" id="linkBox" style="margin-top:14px"><h2>多帳號歸戶</h2>
+   <p class="muted">白天、晚上用不同手機或不同 Google 帳號，都可以記到同一個人身上。</p>
+   <div class="brow"><span><b>${esc(me)}</b><br><span class="muted">目前登入${LINK.linked?'（已歸戶）':'（主帳號）'}</span></span></div>
+   ${LINK.linked?'':others.map(l=>`<div class="brow"><span><b>${esc(l.email||'')}</b><br><span class="muted">${new Date(l.at||0).toLocaleDateString('zh-TW')} 歸戶</span></span><button class="x" data-unlink="${esc(l.uid)}" aria-label="解除 ${esc(l.email||'')}">×</button></div>`).join('')}
+   ${LINK.linked?`<p class="muted" style="margin-top:8px">這個帳號的紀錄都記在主帳號名下。</p><button class="btn ghost" id="lkOut">解除歸戶</button>`
+   :`${LK.code&&left?`<div class="lkcode"><span class="muted">連結碼（${left} 分鐘內有效）</span><b class="num">${LK.code.slice(0,4)} ${LK.code.slice(4)}</b></div>
+      <p class="muted">在另一支裝置用另一個 Google 帳號登入，畫面出現「還沒加入使用名單」時，輸入這組連結碼就好。不用另外加名單。</p>`
+     :`<button class="btn ghost" id="lkMake" style="margin-top:8px">產生連結碼，加入另一個帳號</button>`}
+     <details class="howto" style="margin-top:10px"><summary>這個帳號要併到別的帳號？</summary>
+      <p class="muted">如果你另一個帳號才是主要在用的，在那邊產生連結碼，輸入到這裡。這個帳號目前的紀錄會一起合併過去。</p>
+      <div class="row"><input class="ti" id="lkIn" autocapitalize="characters" autocomplete="off" maxlength="9" placeholder="8 碼連結碼" style="text-transform:uppercase;letter-spacing:2px"><button class="btn" id="lkGo" style="width:auto">歸戶</button></div></details>`}
+  </section>`;
+}
+function bindLink(){
+  const $=id=>document.getElementById(id);
+  if($('lkMake'))$('lkMake').onclick=async()=>{$('lkMake').disabled=true;try{await makeLinkCode();render()}catch(e){toast('產生失敗：資料庫規則還沒更新');$('lkMake').disabled=false}};
+  if($('lkGo'))$('lkGo').onclick=async()=>{if(!confirm('這個帳號的紀錄會合併到另一個帳號，之後兩邊看到的都一樣。確定？'))return;$('lkGo').disabled=true;
+    try{await linkWithCode($('lkIn').value);toast('歸戶完成，重新載入中…');setTimeout(()=>location.reload(),700)}catch(e){toast(errMsg(e),4000);$('lkGo').disabled=false}};
+  sheetless('[data-unlink]',b=>b.onclick=async()=>{if(!confirm('解除後，那個帳號就看不到這裡的紀錄了。確定？'))return;try{await db.doc('links/'+b.dataset.unlink).delete();LK.list=null;render();toast('已解除')}catch(e){toast('解除失敗')}});
+  if($('lkOut'))$('lkOut').onclick=async()=>{if(!confirm('解除後這個帳號會回到自己原本的紀錄（歸戶後新增的紀錄留在主帳號）。確定？'))return;try{await db.doc('links/'+authUid).delete();try{localStorage.removeItem(LS)}catch(e){}location.reload()}catch(e){toast('解除失敗')}};
+  if(LK.code&&Date.now()<LK.exp){clearTimeout(LK.t);LK.t=setTimeout(()=>{if(tab==='settings')render()},30e3)}else LK.code=null;
+}
+function sheetless(sel,fn){app.querySelectorAll(sel).forEach(fn)}
 // ---------- 使用狀況回報 & 管理者後台 ----------
 let lastPing=0;
 async function ping(){
@@ -1573,13 +1666,13 @@ function adminView(){
   const D=ADM.data,U=D.usage[D.month]||{},P=D.usage[D.prev]||{};
   const byUid=Object.fromEntries(D.users.map(u=>[u.uid,u]));
   const allow=(C.allow||[]).map(e=>e.toLowerCase());
-  const seenEmails=new Set(D.users.map(u=>u.email));
+  const seenEmails=new Set(D.users.flatMap(u=>u.emails||[u.email]));
   const sumU=o=>Object.values(o).reduce((a,x)=>({calls:a.calls+x.calls,usd:a.usd+x.usd,searches:a.searches+(x.searches||0)}),{calls:0,usd:0,searches:0});
   const tm=sumU(U),pm=sumU(P),active7=D.users.filter(u=>Date.now()-u.lastSeen<7*864e5).length;
   const day=new Date(Date.now()+8*3600e3).getUTCDate(),dim=new Date(+D.month.slice(0,4),+D.month.slice(5),0).getDate();
   const proj=tm.usd/Math.max(1,day)*dim, nt=v=>'約 NT$'+Math.round(v*32).toLocaleString();
   const rows=D.users.slice().sort((a,b)=>b.lastSeen-a.lastSeen).map(u=>{const x=U[u.uid]||{calls:0,usd:0},st=u.stats||{};
-    return `<div class="arow"><div class="an"><b>${esc(u.name||u.email.split('@')[0])}${u.email===fbUser.email?'（你）':''}</b><span class="muted">${esc(u.email)}</span>
+    return `<div class="arow"><div class="an"><b>${esc(u.name||u.email.split('@')[0])}${u.uid===uid?'（你）':''}</b><span class="muted">${esc((u.emails&&u.emails.length?u.emails:[u.email]).join('、'))}</span>
       <span class="atags">${st.comp?'<i>競賽</i>':''}${st.health?'<i>健康同步</i>':''}${st.body?'<i>身體 '+st.body+' 筆</i>':''}</span></div>
       <div class="am"><span>${ago(u.lastSeen)}</span><span>7 天記錄 <b>${st.days7||0}</b> 天・${st.meals7||0} 餐</span><span>喝水 ${st.water7||0} 天</span><span>本月 AI <b>${x.calls}</b> 次・US$${x.usd.toFixed(2)}</span></div></div>`}).join('');
   const never=allow.filter(e=>!seenEmails.has(e));

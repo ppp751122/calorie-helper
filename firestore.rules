@@ -1,0 +1,68 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===== 熱量小幫手 資料庫規則（多帳號歸戶版）=====
+    // 管理者的 Gmail（要跟 config.js 的 ownerEmail 一樣）
+    function ownerEmail() { return 'ppp751122@gmail.com'; }
+
+    function doc(p) { return get(/databases/$(database)/documents/$(p)); }
+    function linked() { return exists(/databases/$(database)/documents/links/$(request.auth.uid)); }
+    function linkedPid() { return get(/databases/$(database)/documents/links/$(request.auth.uid)).data.pid; }
+    // 這個帳號是不是 pid 這個人（本人帳號，或已經歸戶到他的其他帳號）
+    function isMe(pid) { return request.auth != null && (request.auth.uid == pid || (linked() && linkedPid() == pid)); }
+    function isOwner() {
+      return request.auth != null && (request.auth.token.email == ownerEmail() ||
+        (linked() && exists(/databases/$(database)/documents/config/owner) &&
+         get(/databases/$(database)/documents/config/owner).data.uid == linkedPid()));
+    }
+    function allowed() {
+      return request.auth != null && request.auth.token.email_verified == true && (
+        isOwner() || linked() ||
+        request.auth.token.email.lower() in get(/databases/$(database)/documents/config/allow).data.emails
+      );
+    }
+
+    match /config/allow { allow read: if allowed(); allow write: if isOwner(); }
+    match /config/owner { allow read: if allowed(); allow write: if request.auth != null && request.auth.token.email == ownerEmail() && request.resource.data.uid == request.auth.uid; }
+
+    // 個人資料：本人（含歸戶的其他帳號）才看得到
+    match /data/users/{pid}/{rest=**} {
+      allow read, write: if allowed() && isMe(pid);
+    }
+    // 歸戶前的舊資料：原本的帳號還能讀出來合併
+    match /data/users/{uid}/{rest=**} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // 歸戶：A 帳號產生連結碼（10 分鐘有效），B 帳號輸入連結碼後寫入 links/B
+    match /linkCodes/{code} {
+      allow get: if request.auth != null;   // 知道連結碼才查得到；不能列出全部
+      allow create: if allowed() && isMe(request.resource.data.pid)
+        && request.resource.data.exp <= request.time.toMillis() + 900000;
+      allow delete: if allowed() && isMe(resource.data.pid);
+    }
+    match /links/{uid} {
+      allow read: if request.auth != null && (request.auth.uid == uid || isMe(resource.data.pid));
+      allow create: if request.auth != null && request.auth.uid == uid
+        && request.auth.token.email_verified == true
+        && request.resource.data.pid != uid
+        && exists(/databases/$(database)/documents/linkCodes/$(request.resource.data.code))
+        && get(/databases/$(database)/documents/linkCodes/$(request.resource.data.code)).data.pid == request.resource.data.pid
+        && get(/databases/$(database)/documents/linkCodes/$(request.resource.data.code)).data.exp > request.time.toMillis();
+      allow delete: if request.auth != null && (request.auth.uid == uid || isMe(resource.data.pid));
+    }
+
+    match /names/{pid}   { allow read: if allowed(); allow write: if allowed() && isMe(pid); }
+    match /players/{pid} { allow read: if allowed(); allow write: if allowed() && (isMe(pid) || isOwner()); }
+    match /comp/{d}      { allow read: if allowed(); allow write: if isOwner(); }
+
+    match /taunts/{id} {
+      allow read, create: if allowed();
+      allow delete: if allowed() && (isMe(resource.data.from) || isOwner());
+    }
+    match /foods/{id} {
+      allow read, create, update: if allowed();
+      allow delete: if allowed() && (isMe(resource.data.by) || isOwner());
+    }
+  }
+}

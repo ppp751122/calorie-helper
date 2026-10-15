@@ -56,3 +56,26 @@ export function costUSD(model, inTok, outTok, searches) {
   return (inTok * p[0] + outTok * p[1]) / 1e6 + (searches || 0) * SEARCH_USD;
 }
 export const twMonth = () => new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 7);
+
+// 讀 Firestore 文件（用使用者自己的登入憑證，受安全規則保護）
+async function fsGet(u, path) {
+  const project = Netlify.env.get('FIREBASE_PROJECT_ID');
+  const r = await fetch(`https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents/${path}`, { headers: { Authorization: 'Bearer ' + u.token } });
+  if (!r.ok) return null;
+  const d = await r.json();
+  const o = {}; for (const [k, v] of Object.entries(d.fields || {})) o[k] = v.stringValue ?? v.integerValue ?? v.doubleValue ?? v.booleanValue ?? null;
+  return o;
+}
+// 多帳號歸戶：找出這個帳號屬於哪個人（pid）
+export async function resolvePid(u) {
+  const l = await fsGet(u, 'links/' + u.uid).catch(() => null);
+  return (l && l.pid) || u.uid;
+}
+export async function isOwnerUser(u, req) {
+  const owner = await ownerEmail(req);
+  if (owner && u.email === owner) return true;
+  const pid = await resolvePid(u);
+  if (pid === u.uid) return false;
+  const o = await fsGet(u, 'config/owner').catch(() => null);
+  return !!(o && o.uid === pid);
+}
