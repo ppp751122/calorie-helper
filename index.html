@@ -11,7 +11,7 @@
 <style>
 :root{
   --bg:#E9F0EC; --surface:#FFFFFF; --ink:#1B3530; --muted:#4F6863; --line:#CFDDD6;
-  --fuel:#F2B705; --fuel2:#F7D25E; --room:#2F6FDB; --over:#D64545; --ok:#2E8B57;
+  --fuel:#F2B705; --fuel2:#F7D25E; --room:#2F6FDB; --over:#D64545; --ok:#2E8B57; --water:#3A8DE0; --water2:#8CC2F2;
   --body:#D6E3DD;
   box-sizing:border-box;
   padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
@@ -19,12 +19,12 @@
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
     --bg:#10201C; --surface:#18302A; --ink:#E6F0EC; --muted:#93AAA3; --line:#2A463E;
-    --fuel:#F2B705; --fuel2:#B8890A; --room:#6E9BF0; --over:#F07070; --ok:#5CC48A; --body:#24413A;
+    --fuel:#F2B705; --fuel2:#B8890A; --room:#6E9BF0; --over:#F07070; --ok:#5CC48A; --body:#24413A; --water:#5AA6F0; --water2:#2C5F92;
   }
 }
 :root[data-theme="dark"]{
   --bg:#10201C; --surface:#18302A; --ink:#E6F0EC; --muted:#93AAA3; --line:#2A463E;
-  --fuel:#F2B705; --fuel2:#B8890A; --room:#6E9BF0; --over:#F07070; --ok:#5CC48A; --body:#24413A;
+  --fuel:#F2B705; --fuel2:#B8890A; --room:#6E9BF0; --over:#F07070; --ok:#5CC48A; --body:#24413A; --water:#5AA6F0; --water2:#2C5F92;
 }
 *,*::before,*::after{box-sizing:inherit}
 html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
@@ -44,6 +44,36 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .btn.fuel{background:var(--fuel);color:#1B1B10}
 .btn:disabled{opacity:.5}
 .steps ol{padding-left:20px;margin:4px 0 10px}.steps li{margin-bottom:6px;line-height:1.6}
+.hub3{grid-template-columns:1fr 1fr 1fr!important}
+.wcard{display:grid;grid-template-columns:92px 1fr;gap:14px;align-items:center}
+.wbody{position:relative}
+.bottle{width:100%;height:auto;display:block}
+.bt-bg{fill:var(--bg)}
+.bt-water{transition:transform .9s cubic-bezier(.3,1.3,.5,1)}
+.bt-wave{fill:var(--water);animation:wave 3.2s linear infinite}
+.bt-wave2{fill:var(--water);opacity:.55;animation:wave 4.6s linear infinite reverse}
+.bt-tick{stroke:var(--surface);stroke-width:1.5;opacity:.8}
+.bt-glass{fill:none;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round}
+.bt-cap{fill:var(--water2);stroke:var(--ink);stroke-width:2}
+@keyframes wave{from{transform:translateX(0)}to{transform:translateX(45px)}}
+.wfloat{position:absolute;left:0;right:0;top:40%;text-align:center;font-weight:700;color:var(--water);opacity:0;pointer-events:none}
+.wfloat.go{animation:wfl .9s ease-out}
+@keyframes wfl{0%{opacity:0;transform:translateY(8px)}25%{opacity:1}100%{opacity:0;transform:translateY(-28px)}}
+.wbtns{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.wbtns .btn{padding:9px 4px;font-size:15px}
+.wlink{font-size:13px;padding:4px 0;color:var(--muted);text-decoration:underline;text-underline-offset:3px}
+.sheet .bottle{width:64px}
+@media (prefers-reduced-motion:reduce){.bt-wave,.bt-wave2{animation:none}.bt-water{transition:none}}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.tile{background:var(--surface);border-radius:16px;padding:12px 14px}
+.tile b{display:block;font-size:24px;line-height:1.2}
+.tile span{font-size:12px;color:var(--muted)}
+.arow{padding:10px 0;border-top:1px solid var(--line)}
+.arow:first-of-type{border-top:0}
+.an{display:flex;flex-direction:column}.an .muted{font-size:12px}
+.atags i{font-style:normal;font-size:11px;background:var(--bg);border-radius:6px;padding:1px 6px;margin-right:4px}
+.am{display:flex;flex-wrap:wrap;gap:2px 12px;font-size:13px;color:var(--muted);margin-top:4px}
+.am b{color:var(--ink)}
 .hub{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .hub-h{font-size:13px;color:var(--muted);margin:14px 0 6px}
 .hub-h:first-of-type{margin-top:4px}
@@ -689,7 +719,7 @@ async function cloudInit(){
     else if(local.profile){await db.doc(`data/users/${uid}/profile`).set({profile:local.profile})}
     const days=await db.doc(`data/users/${uid}/profile`).collection('days').orderBy('date','desc').limit(14).get();
     days.docs.forEach(x=>{if(x.exists){const v=clone(x.data());local.days[v.date]={date:v.date,meals:v.meals||[],burn:v.burn||0}}});
-    saveLocal(); render(); photoCloudLoad(); bodyCloudLoad().then(healthPull);
+    saveLocal(); render(); photoCloudLoad(); bodyCloudLoad().then(healthPull).then(ping);
     }catch(e){console.warn('cloud',e)}
   });
 }
@@ -717,6 +747,9 @@ const IC={
  pen:'<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/>',
  doc:'<path d="M7 3h7l4 4v14H7z"/><path d="M10 12h5M10 16h5"/>',
  chev:'<path d="M9 6l6 6-6 6"/>',
+ cup:'<path d="M6 4h12l-1.5 16h-9z"/><path d="M6.6 10h10.8"/>',
+ drop:'<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/>',
+ gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
  run:'<circle cx="14" cy="4.5" r="1.8"/><path d="M9 20l3-6 3 3v4M8 11l3-3 3 1 2 3h3M12 14l-2-3"/>',
  heart:'<path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.5-7 10-7 10z"/>'};
 const ico=n=>`<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n]}</svg>`;
@@ -752,6 +785,7 @@ function render(){
   if(tab==='comp'){app.innerHTML=compView();bindComp()}
   if(tab==='advice'){app.innerHTML=adviceView();bindAdvice()}
   if(tab==='body'){app.innerHTML=bodyView();bindBody()}
+  if(tab==='admin'){app.innerHTML=adminView();bindAdmin()}
   if(tab==='settings'){app.innerHTML=setupView(false)+healthSection()+acctSection();bindSetup();bindLib();bindPhoto();bindHealth();bindAcct()}
   if(tab==='today')bindToday();
 }
@@ -776,6 +810,7 @@ function todayView(){
     </div>
   </section>
   <section class="panel"><h2>營養素</h2><div class="macros">${mac(s.p,c.protein,'蛋白質',1)}${mac(s.c,carbG,'碳水')}${mac(s.f,fatG,'脂肪')}</div></section>
+  ${waterCard(todayKey())}
   ${bodyCard()}
   <section class="panel"><div class="row" style="justify-content:space-between;margin-bottom:6px"><h2 style="margin:0">今天吃了</h2><button class="btn ghost" id="manualBtn" style="width:auto;padding:7px 12px;font-size:14px">用打字記錄</button></div>${mealsHtml}</section>
   <button class="btn ghost" id="adviceBtn" style="margin-bottom:14px">${ico('bulb')}下一餐吃什麼？看飲食建議</button>`;
@@ -786,6 +821,7 @@ function bindToday(){
   document.getElementById('burnBtn').onclick=()=>openBurn(todayKey());
   document.getElementById('adviceBtn').onclick=()=>{tab='advice';render();window.scrollTo(0,0)};
   document.getElementById('bodyCard').onclick=()=>{tab='body';render();window.scrollTo(0,0)};
+  bindWater(app,todayKey());
 }
 
 function weekView(){
@@ -919,6 +955,8 @@ function openHub(){
     <div class="hub">
       <button class="btn ghost" id="hIb">${ico('doc')}拍 InBody</button>
       <button class="btn ghost" id="hW">${ico('scale')}體重</button></div>
+    <p class="hub-h">喝水</p>
+    <div class="hub hub3"><button class="btn ghost" data-hw="250">${ico('cup')}+250</button><button class="btn ghost" data-hw="500">${ico('drop')}+500</button><button class="btn ghost" id="hWater">其他</button></div>
     <p class="hub-h">運動</p>
     <div class="hub"><button class="btn ghost" id="hBurn" style="grid-column:1/-1">${ico('run')}今天的運動消耗</button></div>`);
   const $=id=>document.getElementById(id), t=todayKey();
@@ -930,6 +968,8 @@ function openHub(){
   $('hIb').onclick=()=>{closeSheet();$('inbodyFile').click()};
   $('hW').onclick=()=>openBodyForm({date:t,src:'manual'});
   $('hBurn').onclick=()=>openBurn(t);
+  sheet.querySelectorAll('[data-hw]').forEach(b=>b.onclick=()=>{closeSheet();addWater(t,+b.dataset.hw)});
+  $('hWater').onclick=()=>openWater(t);
 }
 function openChooser(date){
   pendingDate=date;
@@ -1253,6 +1293,7 @@ function calView(){
   <section class="panel">
    <h2>${selDate.slice(5).replace('-','/')}（${'日一二三四五六'[new Date(selDate+'T00:00').getDay()]}）</h2>
    <div class="minirow" style="border:0"><span>吃了 / 額度</span><b class="num">${Math.round(sk)} / ${sb}</b></div>
+   <div class="minirow"><span>喝水</span><span><b class="num">${waterTotal(selDate)?waterTotal(selDate).toLocaleString()+' / '+waterGoal().toLocaleString()+' ml':'—'}</b> <button class="x" id="calWater" aria-label="編輯喝水">✎</button></span></div>
    <div class="minirow"><span>運動消耗</span><span><b class="num">${sburn?'+'+sburn:'—'}</b> <button class="x" id="calBurn" aria-label="編輯運動消耗">✎</button></span></div>
    <div style="margin-top:8px">${mealsList(selDate)}</div>
    ${selDate<=today?`<button class="btn ghost" id="calAdd" style="margin-top:10px">＋ 補記這天的一餐</button>`:''}
@@ -1265,6 +1306,7 @@ function bindCal(){
   app.querySelectorAll('[data-day]').forEach(b=>b.onclick=()=>{selDate=b.dataset.day;render()});
   $('calBurn').onclick=()=>openBurn(selDate);
   if($('calAdd'))$('calAdd').onclick=()=>openChooser(selDate);
+  $('calWater').onclick=()=>openWater(selDate);
   bindMeals(app);
 }
 
@@ -1406,12 +1448,13 @@ function bindComp(){
 
 
 // ---------- 匯出資料（搬家用） ----------
-function acctSection(){return `<section class="panel" style="margin-top:14px"><h2>帳號</h2>
+function acctSection(){return `${isOwnerUser?`<button class="panel bcard" id="adminCard" style="margin-top:14px"><div><h2 style="margin:0 0 2px">${ico('gear')} 管理者後台</h2><span class="muted">使用人數、活躍狀況、AI 花費</span></div>${ico('chev')}</button>`:''}<section class="panel" style="margin-top:14px"><h2>帳號</h2>
   <p class="muted">目前登入：${esc(fbUser?.email||'')}。資料已同步到帳號，換手機也看得到。</p>
   <button class="btn ghost" id="impBtn">匯入舊資料</button>
   <button class="btn ghost" id="expBtn" style="margin-top:8px">複製我的資料（備份）</button>
   <button class="btn ghost" id="outBtn" style="margin-top:8px">登出</button></section>`}
 function bindAcct(){const $=id=>document.getElementById(id);
+  if($('adminCard'))$('adminCard').onclick=()=>{tab='admin';ADM.data=null;render();window.scrollTo(0,0)};
   if($('outBtn'))$('outBtn').onclick=()=>{if(confirm('確定登出？'))firebase.auth().signOut().then(()=>location.reload())};
   if($('expBtn'))$('expBtn').onclick=async()=>{const text='CALORIE-EXPORT-V1'+JSON.stringify({profile:local.profile,days:local.days,foods:foodList().map(f=>{const o=Object.assign({},f);delete o.id;return o})});
     try{await navigator.clipboard.writeText(text);toast('已複製')}catch(e){openSheet(`<h2>長按全選後複製</h2><textarea style="width:100%;height:220px" readonly>${esc(text)}</textarea><button class="btn" onclick="closeSheet()">完成</button>`)}};
@@ -1435,6 +1478,143 @@ function bindAcct(){const $=id=>document.getElementById(id);
 
 
 
+
+// ---------- 喝水 ----------
+function waterGoal(){const p=local.profile||{};return +p.waterGoal||Math.min(4000,Math.max(1200,Math.round((+p.w||60)*30/50)*50))}
+function waterTotal(k){return ((local.days[k]||{}).water||[]).reduce((a,x)=>a+(+x.ml||0),0)}
+const WATER={shown:{}};
+function bottleSVG(pct,id){
+  // pct: 0~1，水位用 translateY 控制，畫面更新時從上一次的水位動到新水位
+  const H=150,top=34,bot=144,from=WATER.shown[id]??pct,y=v=>(bot-top)*(1-Math.min(1,v));
+  return `<svg viewBox="0 0 90 ${H}" class="bottle" aria-hidden="true">
+    <defs><clipPath id="bc-${id}"><path d="M30 6h30v14c0 4 16 8 16 22v92a10 10 0 0 1-10 10H24a10 10 0 0 1-10-10V42c0-14 16-18 16-22z"/></clipPath></defs>
+    <g clip-path="url(#bc-${id})"><rect x="0" y="0" width="90" height="${H}" class="bt-bg"/>
+      <g class="bt-water" data-to="${y(pct).toFixed(1)}" style="transform:translateY(${y(from).toFixed(1)}px)">
+        <path class="bt-wave" d="M-90 ${top} q11.25 -6 22.5 0 t22.5 0 t22.5 0 t22.5 0 t22.5 0 t22.5 0 t22.5 0 t22.5 0 V200 H-90z"/>
+        <path class="bt-wave2" d="M-90 ${top+3} q11.25 5 22.5 0 t22.5 0 t22.5 0 t22.5 0 t22.5 0 t22.5 0 t22.5 0 t22.5 0 V200 H-90z"/></g>
+      ${[.25,.5,.75].map(f=>`<line x1="62" x2="70" y1="${top+(bot-top)*(1-f)}" y2="${top+(bot-top)*(1-f)}" class="bt-tick"/>`).join('')}</g>
+    <path d="M30 6h30v14c0 4 16 8 16 22v92a10 10 0 0 1-10 10H24a10 10 0 0 1-10-10V42c0-14 16-18 16-22z" class="bt-glass"/>
+    <rect x="28" y="1" width="34" height="8" rx="3" class="bt-cap"/>
+  </svg>`;
+}
+function waterCard(k){
+  const t=waterTotal(k),g=waterGoal(),pct=t/g,log=(local.days[k]||{}).water||[],last=log[log.length-1];
+  return `<section class="panel wcard" id="wcard"><div class="wbody">${bottleSVG(pct,'today')}<div class="wfloat" id="wfloat"></div></div>
+    <div class="winfo"><h2 style="margin:0">喝水</h2>
+      <div><b class="num" style="font-size:28px">${t.toLocaleString()}</b><span class="muted"> / ${g.toLocaleString()} ml</span></div>
+      <p class="muted" style="margin:0 0 8px">${pct>=1?'今天達標了 💧':'再喝 '+(g-t).toLocaleString()+' ml'}</p>
+      <div class="wbtns"><button class="btn ghost" data-wadd="150">+150</button><button class="btn ghost" data-wadd="250">+250</button><button class="btn ghost" data-wadd="500">+500</button></div>
+      <div class="row" style="justify-content:space-between;margin-top:6px">${last?`<button class="x wlink" id="wUndo">復原 +${last.ml}</button>`:'<span></span>'}<button class="x wlink" id="wMore">紀錄・目標</button></div>
+    </div></section>`;
+}
+function bindWater(root,k){
+  root.querySelectorAll('[data-wadd]').forEach(b=>b.onclick=()=>addWater(k,+b.dataset.wadd));
+  const u=root.querySelector('#wUndo');if(u)u.onclick=()=>{WATER.shown.today=waterTotal(k)/waterGoal();const d=day(k);d.water=(d.water||[]).slice(0,-1);saveLocal();render();saveDay(k)};
+  const m=root.querySelector('#wMore');if(m)m.onclick=()=>openWater(k);
+  // 水位動畫
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{root.querySelectorAll('.bt-water').forEach(g=>{g.style.transform=`translateY(${g.dataset.to}px)`})}));
+  WATER.shown.today=waterTotal(k)/waterGoal();
+}
+async function addWater(k,ml){
+  if(!(ml>0))return;
+  const before=waterTotal(k),g=waterGoal();
+  WATER.shown.today=before/g;
+  const d=day(k);d.water=(d.water||[]).concat({ml:Math.round(ml),t:new Date().toTimeString().slice(0,5)});
+  saveLocal();
+  if(k===todayKey()&&tab==='today'){render();const f=document.getElementById('wfloat');if(f){f.textContent='+'+ml;f.classList.remove('go');void f.offsetWidth;f.classList.add('go')}}
+  else{render();toast(`已記錄喝水 ${ml} ml${k!==todayKey()?'（'+k.slice(5).replace('-','/')+'）':''}`)}
+  navigator.vibrate?.(20);
+  if(before<g&&before+ml>=g)setTimeout(()=>toast('今天喝水達標了 💧'),700);
+  await saveDay(k);
+}
+function openWater(k){
+  const draw=()=>{const log=(local.days[k]||{}).water||[],t=waterTotal(k),g=waterGoal();
+    openSheet(`<h2>喝水　<span class="muted">${k.slice(5).replace('-','/')}</span></h2>
+      <div class="row" style="gap:12px;align-items:center;margin-bottom:10px">${bottleSVG(t/g,'sheet')}<div><b class="num" style="font-size:24px">${t.toLocaleString()}</b><span class="muted"> / ${g.toLocaleString()} ml</span></div></div>
+      <div class="row"><input class="ti" id="wIn" type="number" inputmode="numeric" placeholder="ml，例如 330"><button class="btn fuel" id="wAdd" style="width:auto">加入</button></div>
+      <div class="chips" style="margin:8px 0 12px">${[[150,'小杯'],[250,'一杯'],[330,'鋁罐'],[500,'寶特瓶'],[700,'大杯手搖']].map(([v,n])=>`<button class="chip" data-wq="${v}">${n} ${v}</button>`).join('')}</div>
+      ${log.length?`<div>${log.map((x,i)=>`<div class="brow"><span><b class="num">${x.ml}</b> ml　<span class="muted">${esc(x.t||'')}</span></span><button class="x" data-wdel="${i}" aria-label="刪除這筆">×</button></div>`).join('')}</div>`:'<p class="muted">這天還沒有喝水紀錄。</p>'}
+      <label class="f" style="margin-top:12px">每日目標 ml <span class="muted">（建議體重 × 30）</span><input type="number" inputmode="numeric" id="wGoal" value="${g}"></label>
+      <button class="btn ghost" onclick="closeSheet()">完成</button>`);
+    const $=id=>document.getElementById(id);
+    requestAnimationFrame(()=>requestAnimationFrame(()=>sheet.querySelectorAll('.bt-water').forEach(x=>x.style.transform=`translateY(${x.dataset.to}px)`)));
+    const add=async ml=>{if(!(ml>0&&ml<5000)){toast('填 1 到 5000 之間的 ml');return}WATER.shown.sheet=waterTotal(k)/waterGoal();const d=day(k);d.water=(d.water||[]).concat({ml:Math.round(ml),t:k===todayKey()?new Date().toTimeString().slice(0,5):''});saveLocal();draw();render();await saveDay(k)};
+    $('wAdd').onclick=()=>add(+$('wIn').value);
+    sheet.querySelectorAll('[data-wq]').forEach(b=>b.onclick=()=>add(+b.dataset.wq));
+    sheet.querySelectorAll('[data-wdel]').forEach(b=>b.onclick=async()=>{WATER.shown.sheet=waterTotal(k)/waterGoal();const d=day(k);d.water.splice(+b.dataset.wdel,1);saveLocal();draw();render();await saveDay(k)});
+    $('wGoal').onchange=async e=>{const v=Math.round(+e.target.value);if(!(v>=500&&v<=6000)){toast('目標填 500 到 6000 ml');e.target.value=waterGoal();return}await saveProfile(Object.assign({},local.profile,{waterGoal:v}),true);WATER.shown.sheet=waterTotal(k)/v;draw();render();toast('已更新目標')};
+  };
+  WATER.shown.sheet=waterTotal(k)/waterGoal();draw();
+}
+
+// ---------- 使用狀況回報 & 管理者後台 ----------
+let lastPing=0;
+async function ping(){
+  if(!fbUser||Date.now()-lastPing<20*60e3)return;lastPing=Date.now();
+  let days7=0,meals7=0,water7=0,lastMeal='';
+  for(let i=0;i<7;i++){const k=addDays(todayKey(),-i),d=local.days[k];if(!d)continue;const n=(d.meals||[]).length;if(n){days7++;meals7+=n}if(waterTotal(k))water7++}
+  Object.keys(local.days).sort().forEach(k=>{if((local.days[k].meals||[]).length)lastMeal=k});
+  try{await fetch('/api/ping',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+await fbUser.getIdToken()},
+    body:JSON.stringify({name:fbUser.displayName||'',stats:{days7,meals7,water7,lastMeal,body:bodyList().length,comp:!!myPlayer(),health:!!healthToken(),photo:!!PH.ready}})})}catch(e){}
+}
+const ADM={data:null,err:'',loading:false};
+async function adminLoad(){
+  ADM.loading=true;ADM.err='';
+  try{const r=await fetch('/api/admin',{headers:{Authorization:'Bearer '+await fbUser.getIdToken()}});const d=await r.json();if(!r.ok)throw new Error(d.error||r.status);ADM.data=d}
+  catch(e){ADM.err=errMsg(e)}
+  ADM.loading=false;if(tab==='admin')render();
+}
+function ago(ms){if(!ms)return '—';const m=(Date.now()-ms)/60e3;return m<2?'剛剛':m<60?Math.round(m)+' 分鐘前':m<1440?Math.round(m/60)+' 小時前':Math.round(m/1440)+' 天前'}
+function adminView(){
+  if(!isOwnerUser)return '<p>只有管理者可以看這頁。</p>';
+  if(!ADM.data&&!ADM.loading&&!ADM.err)adminLoad();
+  const back=`<button class="x" onclick="tab='settings';render()" style="font-size:15px;padding:4px 0">‹ 回我的</button><h1>管理者後台</h1>`;
+  if(!ADM.data)return back+`<section class="panel">${ADM.err?`<p class="tip">讀取失敗：${esc(ADM.err)}</p><button class="btn ghost" id="admRe">重試</button>`:'<div class="thinking"><span class="dot"></span><span class="dot"></span><span class="dot"></span>讀取中…</div>'}</section>`;
+  const D=ADM.data,U=D.usage[D.month]||{},P=D.usage[D.prev]||{};
+  const byUid=Object.fromEntries(D.users.map(u=>[u.uid,u]));
+  const allow=(C.allow||[]).map(e=>e.toLowerCase());
+  const seenEmails=new Set(D.users.map(u=>u.email));
+  const sumU=o=>Object.values(o).reduce((a,x)=>({calls:a.calls+x.calls,usd:a.usd+x.usd,searches:a.searches+(x.searches||0)}),{calls:0,usd:0,searches:0});
+  const tm=sumU(U),pm=sumU(P),active7=D.users.filter(u=>Date.now()-u.lastSeen<7*864e5).length;
+  const day=new Date(Date.now()+8*3600e3).getUTCDate(),dim=new Date(+D.month.slice(0,4),+D.month.slice(5),0).getDate();
+  const proj=tm.usd/Math.max(1,day)*dim, nt=v=>'約 NT$'+Math.round(v*32).toLocaleString();
+  const rows=D.users.slice().sort((a,b)=>b.lastSeen-a.lastSeen).map(u=>{const x=U[u.uid]||{calls:0,usd:0},st=u.stats||{};
+    return `<div class="arow"><div class="an"><b>${esc(u.name||u.email.split('@')[0])}${u.email===fbUser.email?'（你）':''}</b><span class="muted">${esc(u.email)}</span>
+      <span class="atags">${st.comp?'<i>競賽</i>':''}${st.health?'<i>健康同步</i>':''}${st.body?'<i>身體 '+st.body+' 筆</i>':''}</span></div>
+      <div class="am"><span>${ago(u.lastSeen)}</span><span>7 天記錄 <b>${st.days7||0}</b> 天・${st.meals7||0} 餐</span><span>喝水 ${st.water7||0} 天</span><span>本月 AI <b>${x.calls}</b> 次・US$${x.usd.toFixed(2)}</span></div></div>`}).join('');
+  const never=allow.filter(e=>!seenEmails.has(e));
+  const kinds={};Object.values(U).forEach(x=>Object.entries(x.kinds||{}).forEach(([k,v])=>kinds[k]=(kinds[k]||0)+v));
+  const KN={photo:'拍照辨識',text:'打字辨識',chat:'評語・建議',inbody:'InBody',face:'照片定位'};
+  const foods=foodList(),wk=Date.now()-7*864e5;
+  return back+`<p class="muted">這裡只看得到使用狀況和 AI 花費，看不到朋友吃了什麼或體重。</p>
+  <div class="tiles">
+    <div class="tile"><b class="num">${D.users.length}</b><span>登入過的人${allow.length?'（名單 '+(allow.length+1)+' 人）':''}</span></div>
+    <div class="tile"><b class="num">${active7}</b><span>7 天內有打開</span></div>
+    <div class="tile"><b class="num">${tm.calls}</b><span>本月 AI 次數</span></div>
+    <div class="tile"><b class="num">US$${tm.usd.toFixed(2)}</b><span>本月 AI 花費<br>${nt(tm.usd)}</span></div>
+  </div>
+  <section class="panel"><h2>AI 花費</h2>
+    <div class="minirow" style="border:0"><span>本月到今天</span><b class="num">US$${tm.usd.toFixed(2)}</b></div>
+    <div class="minirow"><span>照目前速度，月底約</span><b class="num">US$${proj.toFixed(2)}</b></div>
+    <div class="minirow"><span>上個月</span><b class="num">US$${pm.usd.toFixed(2)}</b></div>
+    <div class="minirow"><span>上網搜尋次數（本月）</span><b class="num">${tm.searches}</b></div>
+    ${Object.keys(kinds).length?`<p class="muted" style="margin-top:8px">用途：${Object.entries(kinds).sort((a,b)=>b[1]-a[1]).map(([k,v])=>(KN[k]||k)+' '+v).join('、')}</p>`:''}
+    <p class="muted">花費是依官方定價估算，實際扣款和剩餘額度以 <a href="https://platform.claude.com/settings/billing" target="_blank" rel="noopener">Claude Console</a> 為準。台幣以 1:32 換算。</p></section>
+  <section class="panel"><h2>使用者</h2>${rows||'<p class="muted">還沒有人登入。</p>'}
+    ${never.length?`<p class="hub-h">在名單上但還沒登入</p>${never.map(e=>`<div class="arow"><span>${esc(e)}</span></div>`).join('')}`:''}
+    <p class="muted" style="margin-top:8px">使用者的數字在對方打開 App 時更新。</p></section>
+  <section class="panel"><h2>商品熱量庫</h2>
+    <div class="minirow" style="border:0"><span>總共</span><b class="num">${foods.length} 筆</b></div>
+    <div class="minirow"><span>最近 7 天新增</span><b class="num">${foods.filter(f=>(f.at||0)>wk).length} 筆</b></div>
+    <div class="minirow"><span>來源</span><span class="muted">${Object.entries(foods.reduce((a,f)=>{const s=f.src||'manual';a[s]=(a[s]||0)+1;return a},{})).map(([k,v])=>({label:'營養標示',brand:'品牌公布',off:'條碼',manual:'手動',tfnd:'食藥署'}[k]||k)+' '+v).join('、')||'—'}</span></div>
+    <button class="btn ghost" id="admLib" style="margin-top:10px">管理商品庫</button></section>
+  <button class="btn ghost" id="admRe" style="margin-bottom:16px">重新整理</button>`;
+}
+function bindAdmin(){
+  const $=id=>document.getElementById(id);
+  if($('admRe'))$('admRe').onclick=()=>{ADM.data=null;ADM.err='';render()};
+  if($('admLib'))$('admLib').onclick=()=>{tab='settings';render();setTimeout(()=>document.getElementById('libBox')?.scrollIntoView({behavior:'smooth'}),60)};
+}
 // ---------- Apple 健康自動同步（捷徑 → /api/health → App）----------
 function healthToken(){return local.profile&&local.profile.healthToken||''}
 async function ensureHealthToken(){
