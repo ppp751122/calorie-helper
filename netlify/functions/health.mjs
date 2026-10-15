@@ -36,8 +36,11 @@ export default async (req) => {
   const token = String(b.token || '').trim().toLowerCase();
   if (!okToken(token)) return j({ error: 'token 不對，請到 App 的「我的 → Apple 健康自動同步」重新複製' }, 400);
   const date = /^\d{4}-\d{2}-\d{2}$/.test(String(b.date || '')) ? b.date : twDate();
-  const burn = num(b.burn), weight = num(b.weight), steps = num(b.steps);
-  if (burn == null && weight == null && steps == null) return j({ error: '沒有收到任何數字' }, 400);
+  let burn = num(b.burn), weight = num(b.weight), steps = num(b.steps);
+  // 捷徑在健康 App 還沒有資料時會送空白，當作 0
+  const emptyBurn = burn == null && 'burn' in b && String(b.burn ?? '').trim() === '';
+  if (emptyBurn) burn = 0;
+  if (burn == null && weight == null && steps == null) return j({ error: '沒有收到任何數字', 收到的內容: String(b.burn ?? '').slice(0, 80) }, 400);
   const key = `${token}/${date}`;
   const old = (await store.get(key, { type: 'json' })) || {};
   const rec = Object.assign(old, { date, at: Date.now() });
@@ -45,6 +48,6 @@ export default async (req) => {
   if (weight != null && weight > 20 && weight < 300) rec.weight = Math.round(weight * 10) / 10;
   if (steps != null && steps >= 0) rec.steps = Math.round(steps);
   await store.setJSON(key, rec);
-  return j({ ok: true, saved: rec, message: `已同步 ${date}` + (rec.burn != null ? `：運動 ${rec.burn} 大卡` : '') + (rec.weight != null ? `、體重 ${rec.weight} kg` : '') });
+  return j({ ok: true, saved: rec, message: `已同步 ${date}` + (rec.burn != null ? `：運動 ${rec.burn} 大卡` : '') + (rec.weight != null ? `、體重 ${rec.weight} kg` : '') + (emptyBurn ? '（健康 App 今天還沒有活動能量資料，所以是 0）' : '') });
 };
 export const config = { path: '/api/health' };
