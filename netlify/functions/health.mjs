@@ -21,7 +21,8 @@ export default async (req) => {
     const keys = blobs.map(b => b.key).filter(k => k.slice(token.length + 1) >= since).sort().slice(-120);
     const out = [];
     for (const k of keys) { const v = await store.get(k, { type: 'json' }); if (v) out.push(v); }
-    return j({ entries: out });
+    const log = (await getStore({ name: 'healthlog', consistency: 'strong' }).get(token, { type: 'json' })) || [];
+    return j({ entries: out, log });
   }
   if (!isWrite) return j({ error: '只接受 GET / POST' }, 405);
   let b = {};
@@ -35,12 +36,19 @@ export default async (req) => {
   url.searchParams.forEach((v, k) => { if (b[k] == null) b[k] = v; });
   const token = String(b.token || '').trim().toLowerCase();
   if (!okToken(token)) return j({ error: 'token 不對，請到 App 的「我的 → Apple 健康自動同步」重新複製' }, 400);
+  // 記錄最近 10 次捷徑送來的內容，方便在 App 裡檢查
+  const logStore = getStore({ name: 'healthlog', consistency: 'strong' });
+  const note = async (ok, msg) => {
+    const L = (await logStore.get(token, { type: 'json' })) || [];
+    L.push({ at: Date.now(), raw: String(b.burn ?? '').slice(0, 60), ok, msg });
+    await logStore.setJSON(token, L.slice(-10));
+  };
   const date = /^\d{4}-\d{2}-\d{2}$/.test(String(b.date || '')) ? b.date : twDate();
   let burn = num(b.burn), weight = num(b.weight), steps = num(b.steps);
   // 捷徑在健康 App 還沒有資料時會送空白，當作 0
   const emptyBurn = burn == null && 'burn' in b && String(b.burn ?? '').trim() === '';
   if (emptyBurn) burn = 0;
-  if (burn == null && weight == null && steps == null) return j({ error: '沒有收到任何數字', 收到的內容: String(b.burn ?? '').slice(0, 80) }, 400);
+  if (burn == null && weight == null && steps == null) { await note(false, '沒有收到任何數字'); return j({ error: '沒有收到任何數字', 收到的內容: String(b.burn ?? '').slice(0, 80) }, 400); }
   const key = `${token}/${date}`;
   const old = (await store.get(key, { type: 'json' })) || {};
   const rec = Object.assign(old, { date, at: Date.now() });
@@ -48,6 +56,7 @@ export default async (req) => {
   if (weight != null && weight > 20 && weight < 300) rec.weight = Math.round(weight * 10) / 10;
   if (steps != null && steps >= 0) rec.steps = Math.round(steps);
   await store.setJSON(key, rec);
+  await note(true, rec.burn != null ? `運動 ${rec.burn} 大卡` : '已同步');
   return j({ ok: true, saved: rec, message: `已同步 ${date}` + (rec.burn != null ? `：運動 ${rec.burn} 大卡` : '') + (rec.weight != null ? `、體重 ${rec.weight} kg` : '') + (emptyBurn ? '（健康 App 今天還沒有活動能量資料，所以是 0）' : '') });
 };
 export const config = { path: '/api/health' };

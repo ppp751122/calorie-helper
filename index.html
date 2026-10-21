@@ -1828,6 +1828,7 @@ async function healthPull(){
   const t=healthToken();if(!t)return;
   try{
     const r=await fetch('/api/health?token='+t+'&since='+addDays(todayKey(),-45));const d=await r.json();
+    local.healthLog=d.log||[];local.healthLast=(d.entries||[]).slice(-1)[0]||null;
     let nb=0,nw=0;const touched=new Set();
     for(const e of (d.entries||[])){
       if(e.burn!=null){const dy=day(e.date);if(+dy.burn!==+e.burn){dy.burn=e.burn;dy.burnSrc='health';touched.add(e.date);nb++}}
@@ -1836,14 +1837,25 @@ async function healthPull(){
     }
     for(const k of touched)await saveDay(k);
     local.healthAt=Date.now();saveLocal();
+    if(!(nb||nw)&&tab==='settings')render();
     if(nb||nw){render();toast(`已從 Apple 健康同步${nb?' '+nb+' 天運動消耗':''}${nw?(nb?'、':' ')+nw+' 筆體重':''}`)}
   }catch(e){console.warn('health',e)}
+}
+function healthStatus(){
+  const L=local.healthLog||[],last=L[L.length-1],f=ms=>new Date(ms).toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+  const today=day(todayKey()).burn;
+  let st;
+  if(!last)st=`<p class="tip">還沒收到捷徑送來的資料。請在捷徑 App 打開「熱量同步」按 ▶︎ 測試一次。</p>`;
+  else if(!last.ok)st=`<p class="tip">捷徑 ${f(last.at)} 有送來，但內容是「${esc(last.raw||'空白')}」，讀不到數字。請檢查網址最後面是不是接「加總」。</p>`;
+  else st=`<p class="muted">捷徑最後一次送來：<b>${f(last.at)}</b>，${esc(last.msg)}${last.at<Date.now()-36*3600e3?'。<br>已經超過一天沒送來，請檢查捷徑的「自動化」有沒有開。':''}</p>`;
+  return `<div class="minirow" style="border:0"><span>今天的運動消耗</span><b>${today!=null&&today!==''?today+' 大卡':'—'}</b></div>${st}
+   ${L.length>1?`<details class="howto"><summary>最近 ${L.length} 次紀錄</summary>${L.slice().reverse().map(x=>`<div class="brow"><span>${f(x.at)}</span><span class="${x.ok?'':'up-bad'}">${esc(x.ok?x.msg:'收到「'+(x.raw||'空白')+'」')}</span></div>`).join('')}</details>`:''}`;
 }
 function healthSection(){
   const t=healthToken();
   return `<section class="panel" id="healthBox"><h2>${ico('heart')} Apple 健康自動同步</h2>
   <p class="muted">網頁 App 沒辦法直接讀 iPhone 健康資料，要靠「捷徑」轉送。設定一次就好，之後每天自動帶入運動消耗。</p>
-  ${t?`<div class="minirow" style="border:0"><span>上次同步</span><b>${local.healthAt?new Date(local.healthAt).toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'還沒有'}</b></div>
+  ${t?`${healthStatus()}
   <div class="row" style="margin:6px 0 10px"><button class="btn ghost" id="hpNow">檢查有沒有新資料</button></div>
   ${C.config&&C.config.shortcutUrl?`<div class="steps">
    <p class="hub-h">① 安裝捷徑</p>
