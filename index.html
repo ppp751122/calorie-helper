@@ -1293,12 +1293,13 @@ function bindMeals(root){
 }
 function openEdit(k,i){
   const m=day(k).meals[i]; if(!m)return;
-  const ed={type:m.type,time:m.time,items:m.items.map(x=>Object.assign({},x)),thumb:m.thumb||''};
+  const ed={type:m.type,time:m.time,date:k,items:m.items.map(x=>Object.assign({},x)),thumb:m.thumb||''};
   const draw=()=>{
     const tot=ed.items.reduce((a,x)=>a+(+x.kcal||0),0);
     openSheet(`<h2>編輯這餐</h2>${ed.thumb?`<div class="row" style="align-items:center;margin-bottom:8px"><img src="${ed.thumb}" alt="" style="width:56px;height:56px;border-radius:10px;object-fit:cover"><button class="btn ghost" id="eNoPic" style="width:auto">刪除照片</button></div>`:''}
-     <div class="row"><label class="f" style="flex:1">餐別<select id="eType">${['早餐','午餐','點心','晚餐','宵夜'].map(t=>`<option ${t===ed.type?'selected':''}>${t}</option>`).join('')}</select></label>
+     <div class="row"><label class="f" style="flex:1">日期<input type="date" id="eDate" value="${esc(ed.date)}" max="${todayKey()}"></label>
      <label class="f" style="flex:1">時間<input type="time" id="eTime" value="${esc(ed.time)}"></label></div>
+     <label class="f">餐別<select id="eType">${['早餐','午餐','點心','晚餐','宵夜'].map(t=>`<option ${t===ed.type?'selected':''}>${t}</option>`).join('')}</select></label>
      ${ed.items.map((x,j)=>`<div class="item item3s"><input data-en="${j}" value="${esc(x.name)}" placeholder="食物名稱" style="text-align:left"><input type="number" inputmode="numeric" data-ek="${j}" value="${Math.round(+x.kcal||0)}" aria-label="熱量"><button class="x star ${isFav(x.name)?'on':''}" data-es="${j}" aria-pressed="${isFav(x.name)}" aria-label="${isFav(x.name)?'從常用移除':'加入常用'}">${isFav(x.name)?'★':'☆'}</button><button class="x" data-er="${j}" aria-label="移除">×</button></div>`).join('')}
      <p class="muted" style="font-size:13px">點 ☆ 可以把這個品項加入常用。</p>
      <button class="btn ghost" id="eAdd" style="margin:8px 0">＋ 新增項目</button>
@@ -1311,6 +1312,7 @@ function openEdit(k,i){
     sheet.querySelectorAll('[data-es]').forEach(b=>b.onclick=async()=>{const x=ed.items[+b.dataset.es];if(!(x.name||'').trim()){toast('先填食物名稱');return}await toggleFav(x);draw()});
     if($('eNoPic'))$('eNoPic').onclick=()=>{ed.thumb='';draw()};
     $('eType').onchange=e=>ed.type=e.target.value; $('eTime').onchange=e=>ed.time=e.target.value;
+    $('eDate').onchange=e=>{const v=e.target.value;if(!v||v>todayKey()){e.target.value=ed.date;toast('不能選未來的日期');return}ed.date=v};
     $('eAdd').onclick=()=>{ed.items.push({name:'',portion:'',kcal:0,protein_g:0,carbs_g:0,fat_g:0,emoji:''});draw()};
     $('eCancel').onclick=closeSheet;
     $('eSave').onclick=async()=>{
@@ -1320,7 +1322,18 @@ function openEdit(k,i){
         // 熱量改了的話，蛋白質等依比例調整
         const orig=m.items;
         items.forEach(x=>{const o=orig.find(y=>y.name===x.name);if(o&&+o.kcal>0&&+x.kcal!==+o.kcal){const r=x.kcal/o.kcal;['protein_g','carbs_g','fat_g'].forEach(f=>x[f]=Math.round((+o[f]||0)*r*10)/10)}x.kcal=Math.round(+x.kcal||0);x.name=String(x.name||'食物').trim()||'食物'});
-        const nm=Object.assign({},m,{type:ed.type,time:ed.time,items});if(!ed.thumb)delete nm.thumb;day(k).meals[i]=nm;
+        const nm=Object.assign({},m,{type:ed.type,time:ed.time,items});if(!ed.thumb)delete nm.thumb;
+        if(ed.date!==k){
+          // 換日期：先把目標那天的雲端紀錄讀進來，避免蓋掉
+          if(db&&uid){try{const x=await db.doc(`data/users/${uid}/profile`).collection('days').doc(ed.date).get();
+            if(x.exists){const v=JSON.parse(JSON.stringify(x.data()));const cur=local.days[ed.date];
+              if(!cur||((cur.meals||[]).length<(v.meals||[]).length))local.days[ed.date]=Object.assign({},v,{meals:v.meals||[],burn:v.burn||0})}}catch(e){toast('讀不到那天的紀錄，請檢查網路');return}}
+          day(k).meals.splice(i,1);
+          const to=day(ed.date);to.meals.push(nm);to.meals.sort((a,b)=>String(a.time||'').localeCompare(String(b.time||'')));
+          saveLocal(); closeSheet(); render(); toast('已移到 '+ed.date.slice(5).replace('-','/'));
+          await saveDay(k); await saveDay(ed.date); return;
+        }
+        day(k).meals[i]=nm;
       }
       saveLocal(); closeSheet(); render(); toast('已更新'); await saveDay(k);
     };
