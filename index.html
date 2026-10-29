@@ -43,7 +43,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
 .btn.fuel{background:var(--fuel);color:#1B1B10}
 .btn:disabled{opacity:.5}
-.steps ol{padding-left:20px;margin:4px 0 10px}.steps li{margin-bottom:6px;line-height:1.6}
+.steps ol{padding-left:20px;margin:4px 0 10px}
+.btn.mini{width:auto;padding:6px 12px;font-size:14px;margin-top:6px}.steps li{margin-bottom:6px;line-height:1.6}
 .hub3{grid-template-columns:1fr 1fr 1fr!important}
 .wcard{display:grid;grid-template-columns:92px 1fr;gap:14px;align-items:center}
 .wbody{position:relative}
@@ -1872,25 +1873,26 @@ function healthSection(){
   <div class="row" style="margin:6px 0 10px"><button class="btn ghost" id="hpNow">檢查有沒有新資料</button></div>
   ${C.config&&C.config.shortcutUrl?`<div class="steps">
    <p class="hub-h">① 安裝捷徑</p>
-   <button class="btn ghost" id="hpUrl">先複製我的同步網址</button>
+   <button class="btn ghost" id="hpCopyA">複製我的同步碼</button>
    <a class="btn fuel" style="display:block;text-align:center;text-decoration:none;margin-top:8px" href="${esc(C.config.shortcutUrl)}" target="_blank" rel="noopener">一鍵安裝「熱量同步」捷徑</a>
-   <p class="muted" style="margin-top:6px">安裝時會問「同步網址」，長按貼上剛剛複製的網址 → 加入捷徑。裝好後在捷徑 App 按一下測試，看到「已同步」就成功。</p>
-   <p class="hub-h">② 每天自動執行</p>
-   <p>捷徑 App 下方「自動化」→ ＋ →「特定時間」→ 21:30、每天 →「立即執行」→ 選「熱量同步」。</p>
+   <p class="muted" style="margin-top:6px">安裝時會問「同步碼」，長按貼上 → 加入捷徑。裝好後按一下測試。</p>
+   <p class="hub-h">② 每天早上自動執行</p>
+   <p>捷徑 App 下方「自動化」→ ＋ →「特定時間」→ <b>早上 7:30</b>、每天 →「立即執行」→ 選「熱量同步」。</p>
   </div>`:`<div class="steps">
-   <p class="hub-h">① 建捷徑（4 個動作，只要做一次）</p>
+   <p class="muted">捷徑每次執行會先問網站「哪幾天還沒有資料」，最近 7 天缺的會自動補抓，昨天和今天也會更新成最新數字。</p>
+   <p class="hub-h">① 建捷徑（5 個動作）</p>
    <ol>
-    <li>打開「捷徑」App，右上角 ＋，加入 <b>文字</b>，在文字框<b>貼上</b>同步網址（按下面黃色按鈕複製）</li>
-    <li>加入 <b>尋找健康樣本</b>，類型點成「活動能量」，按「新增篩選條件」選「開始日期 是今天」</li>
-    <li>加入 <b>計算統計資料</b>，選「總和」</li>
-    <li>加入 <b>取得 URL 內容</b>，網址欄位點鍵盤上方先選「文字」，再選「統計資料」</li>
+    <li>加入 <b>取得 URL 內容</b>，網址貼上 <b>網址 A</b><br><button class="btn ghost mini" id="hpCopyA">複製網址 A</button></li>
+    <li>加入 <b>重複每個項目</b>（它會自動接在上一步後面）</li>
+    <li>在「重複」裡面加入 <b>尋找健康樣本</b>：類型「活動能量」，篩選條件選「開始日期」「是」，日期那格點一下 → 選變數「<b>重複項目</b>」。「限制」保持關閉</li>
+    <li>在「重複」裡面加入 <b>計算統計資料</b>：「加總」</li>
+    <li>在「重複」裡面加入 <b>取得 URL 內容</b>，網址貼上 <b>網址 B</b>，接著在最後面依序點變數「<b>重複項目</b>」和「<b>加總</b>」，中間不用打任何字<br><button class="btn ghost mini" id="hpCopyB">複製網址 B</button></li>
    </ol>
-   <button class="btn fuel" id="hpUrl">複製同步網址</button>
-   <p class="muted" style="margin-top:6px">捷徑命名「熱量同步」，按右下角 ▶︎ 測試，看到「已同步」就成功。第一次會問能不能讀健康資料，選允許。</p>
-   <p class="hub-h">② 每天自動執行</p>
-   <p>捷徑 App 下方「自動化」→ ＋ →「特定時間」→ 21:30、每天 →「立即執行」→ 選「熱量同步」。</p>
-   ${C.isOwner?`<p class="hub-h">③ 讓朋友一鍵安裝（選做）</p>
-   <p class="muted">捷徑做好後，長按它 → 分享 →「選項」→「設定匯入問題」勾第 1 個動作的文字，填「同步網址」→ 完成 →「拷貝 iCloud 連結」，貼到下面。朋友就會看到一鍵安裝按鈕，不用自己建。</p>
+   <p class="muted">完成後網址 B 會長這樣：<code>…&amp;v=</code> 重複項目 加總。捷徑命名「熱量同步」，按 ▶︎ 測試，回到這裡按「檢查有沒有新資料」。</p>
+   <p class="hub-h">② 每天早上自動執行</p>
+   <p>捷徑 App 下方「自動化」→ ＋ →「特定時間」→ <b>早上 7:30</b>、每天 →「立即執行」並關掉「執行時通知」→ 選「熱量同步」。早上跑會補齊昨天一整天的數字。</p>
+   ${C.isOwner||isOwnerUser?`<p class="hub-h">③ 讓朋友一鍵安裝（選做）</p>
+   <p class="muted">捷徑做好後，把網址 A、B 裡的同步碼（token= 後面那串）改成用「文字」動作提問：長按捷徑 → 分享 →「選項」→「設定匯入問題」。或直接問我怎麼做。拷貝 iCloud 連結貼到下面。</p>
    <div class="row"><input class="ti" id="scIn" inputmode="url" placeholder="https://www.icloud.com/shortcuts/..."><button class="btn" id="scSave" style="width:auto">儲存</button></div>`:''}
   </div>`}`
   :`<button class="btn" id="hpOn">開始設定</button>`}
@@ -1899,7 +1901,9 @@ function healthSection(){
 function bindHealth(){
   const $=id=>document.getElementById(id);
   if($('hpOn'))$('hpOn').onclick=async()=>{await ensureHealthToken();render();setTimeout(()=>{const d=document.querySelector('#healthBox details');if(d)d.open=true;document.getElementById('healthBox')?.scrollIntoView({behavior:'smooth'})},60)};
-  if($('hpUrl'))$('hpUrl').onclick=async()=>{const u=location.origin+'/api/health?token='+healthToken()+'&burn=';try{await navigator.clipboard.writeText(u);toast('已複製，貼到捷徑的網址欄位')}catch(e){prompt('長按複製同步網址',u)}};
+  const cp=async(u,msg)=>{try{await navigator.clipboard.writeText(u);toast(msg)}catch(e){prompt('長按複製',u)}};
+  if($('hpCopyA'))$('hpCopyA').onclick=()=>cp($('hpCopyA').textContent.includes('同步碼')?healthToken():location.origin+'/api/health?token='+healthToken()+'&need=1','已複製網址 A');
+  if($('hpCopyB'))$('hpCopyB').onclick=()=>cp(location.origin+'/api/health?token='+healthToken()+'&v=','已複製網址 B');
   if($('hpCopy'))$('hpCopy').onclick=async()=>{try{await navigator.clipboard.writeText(healthToken());toast('已複製同步碼，貼到捷徑的 token 欄位')}catch(e){prompt('長按複製同步碼',healthToken())}};
   if($('scSave'))$('scSave').onclick=async()=>{const u=$('scIn').value.trim();if(!/^https:\/\/www\.icloud\.com\/shortcuts\//.test(u)){toast('要貼 iCloud 捷徑連結（https://www.icloud.com/shortcuts/…）');return}
     try{await db.doc('comp/config').set(Object.assign({},compCfg(),{shortcutUrl:u}));toast('已儲存，朋友會看到一鍵安裝按鈕')}catch(e){toast('儲存失敗')}};
