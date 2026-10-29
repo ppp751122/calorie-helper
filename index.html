@@ -795,6 +795,7 @@ const IC={
  pen:'<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/>',
  doc:'<path d="M7 3h7l4 4v14H7z"/><path d="M10 12h5M10 16h5"/>',
  chev:'<path d="M9 6l6 6-6 6"/>',
+ box:'<path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/>',
  star:'<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>',
  cup:'<path d="M6 4h12l-1.5 16h-9z"/><path d="M6.6 10h10.8"/>',
  drop:'<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/>',
@@ -1019,7 +1020,8 @@ function openHub(){
       <button class="btn ghost" id="hLib">${ico('img')}相簿</button>
       <button class="btn ghost" id="hBar">${ico('bar')}掃條碼</button>
       <button class="btn ghost" id="hTxt">${ico('key')}打字</button>
-      <button class="btn ghost" id="hFav" style="grid-column:1/-1">${ico('star')}從常用項目選</button></div>
+      <button class="btn ghost" id="hFav">${ico('star')}常用項目</button>
+      <button class="btn ghost" id="hLibP">${ico('box')}商品庫</button></div>
     <p class="hub-h">身體</p>
     <div class="hub">
       <button class="btn ghost" id="hIb">${ico('doc')}拍 InBody</button>
@@ -1035,6 +1037,7 @@ function openHub(){
   $('hBar').onclick=()=>openScanner(t);
   $('hTxt').onclick=()=>openCapture(null,t);
   $('hFav').onclick=()=>openFavPicker(t);
+  $('hLibP').onclick=()=>{openCapture(null,t);openLibSearch()};
   $('hIb').onclick=()=>{closeSheet();$('inbodyFile').click()};
   $('hW').onclick=()=>openBodyForm({date:t,src:'manual'});
   $('hBurn').onclick=()=>openBurn(t);
@@ -1078,10 +1081,11 @@ function openCapture(blob,date){
    <div class="row"><button class="btn fuel" id="goAI" ${sample?'':'hidden'}>${blob?'開始辨識':'估算熱量'}</button>
    <button class="btn ghost" id="goManual">${sample?'自己輸入':'新增項目'}</button></div>
    ${favList().length?`<div class="favrow"><span class="muted">常用</span>${favList().map((f,i)=>`<button class="chip" data-fadd="${i}">${esc(f.name)} <b class="num">${f.kcal}</b></button>`).join('')}</div>`:''}
-   <button class="btn ghost" id="goTfnd" style="margin-top:8px">${ico('search')}查食藥署食材熱量</button>
+   <div class="row" style="margin-top:8px"><button class="btn ghost" id="goLib">${ico('box')}從商品庫選</button><button class="btn ghost" id="goTfnd">${ico('search')}查食藥署食材</button></div>
    <div id="tfBox"></div>
    <div id="capOut"></div>`);
   document.getElementById('goTfnd').onclick=openTfndSearch;
+  document.getElementById('goLib').onclick=openLibSearch;
   sheet.querySelectorAll('[data-fadd]').forEach(b=>b.onclick=()=>{addFavToDraft(favList()[+b.dataset.fadd]);b.classList.add('on');showItems(draft.note||'')});
   document.getElementById('capDate').onchange=e=>{const v=e.target.value;if(!v||v>todayKey()){e.target.value=draft.date;toast('不能選未來的日期');return}draft.date=v;if(v!==todayKey())toast('會記在 '+v.slice(5).replace('-','/'))};
   document.getElementById('goAI').onclick=runAI;
@@ -1639,6 +1643,28 @@ function openWater(k){
 
 
 
+
+// ---------- 從商品庫選（記錄一餐時）----------
+function libItem(f,q){const r=v=>Math.round((+v||0)*q*10)/10;
+  return{name:f.name,portion:(q!==1?q+' × ':'')+(f.portion||'1份'),kcal:Math.round(f.kcal*q),protein_g:r(f.protein_g),carbs_g:r(f.carbs_g),fat_g:r(f.fat_g),emoji:'',src:'lib',libId:f.id,qty:q}}
+function openLibSearch(){
+  const box=document.getElementById('tfBox');if(!box)return;
+  const all=foodList().slice().sort((a,b)=>(b.at||0)-(a.at||0));
+  box.innerHTML=`<div class="panel" style="margin:10px 0;padding:12px"><input class="ti" id="lsQ" placeholder="搜尋商品庫，例如：奶茶、便當" style="width:100%"><div id="lsRes"></div></div>`;
+  const q=document.getElementById('lsQ'),res=document.getElementById('lsRes');
+  const hint=document.getElementById('hint');if(hint&&hint.value.trim()&&!draft.items.length)q.value=hint.value.trim().split(/[\s,，、]/)[0];
+  const draw=()=>{const n=normName(q.value);
+    const L=all.filter(f=>!n||normName(f.name).includes(n)||(f.aliases||[]).some(a=>normName(a).includes(n))).slice(0,30);
+    res.innerHTML=!all.length?'<p class="muted">商品庫還沒有東西。</p>':L.length?L.map((f,i)=>`<button class="tf-row" data-ls="${i}"><span><b>${esc(f.name)}</b><small>${esc(f.portion||'1份')}</small></span><span class="num">${f.kcal}<small> 大卡</small></span></button>`).join(''):'<p class="muted">找不到，換個關鍵字試試。</p>';
+    res.querySelectorAll('[data-ls]').forEach(b=>b.onclick=()=>{const f=L[+b.dataset.ls];
+      res.innerHTML=`<p><b>${esc(f.name)}</b>：${esc(f.portion||'1份')} ${f.kcal} 大卡</p>
+        <div class="row"><button class="btn ghost" data-qq="0.5" style="width:auto">半份</button><input class="ti" id="lsQty" type="number" inputmode="decimal" step="0.5" value="1" aria-label="幾份"><span style="align-self:center">份</span><button class="btn fuel" id="lsAdd" style="width:auto">加入</button></div>`;
+      res.querySelector('[data-qq]').onclick=()=>{document.getElementById('lsQty').value=0.5};
+      document.getElementById('lsAdd').onclick=()=>{const qty=+document.getElementById('lsQty').value;if(!(qty>0)){toast('填幾份');return}
+        draft.items.push(libItem(f,qty));box.innerHTML='';showItems(draft.note||'')};
+    })};
+  draw();q.oninput=draw;q.focus();
+}
 // ---------- 常用項目（個人，跟著帳號同步）----------
 function favList(){return (local.profile&&local.profile.favs)||[]}
 function isFav(name){const n=normName(name);return !!n&&favList().some(f=>normName(f.name)===n)}
