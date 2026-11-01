@@ -118,6 +118,7 @@ label.f input,label.f select,textarea{display:block;width:100%;margin-top:4px;pa
 .meal .d{font-size:13px;color:var(--muted)}
 .meal .k{font-weight:700;white-space:nowrap}
 .x{border:0;background:transparent;color:var(--muted);padding:2px 6px;font-size:18px;line-height:1}
+.x .ic{width:17px;height:17px;vertical-align:-2px}
 
 /* Tabs */
 nav.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);
@@ -795,6 +796,7 @@ const IC={
  pen:'<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/>',
  doc:'<path d="M7 3h7l4 4v14H7z"/><path d="M10 12h5M10 16h5"/>',
  chev:'<path d="M9 6l6 6-6 6"/>',
+ copy:'<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>',
  box:'<path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/>',
  star:'<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>',
  cup:'<path d="M6 4h12l-1.5 16h-9z"/><path d="M6.6 10h10.8"/>',
@@ -1285,7 +1287,7 @@ function mealsList(k){
     return `<div class="meal">${m.thumb?`<button class="mthumb" data-thumb="${k}|${i}" aria-label="看這餐的照片"><img src="${m.thumb}" alt=""></button>`:''}<div style="flex:1;min-width:0"><div class="t">${esc(m.type)} <span class="muted">${esc(m.time)}</span></div>
       <div class="d">${m.items.map(x=>esc(x.name)+' '+Math.round(+x.kcal||0)).join('、')}</div>${m.comment?`<div class="cm ${m.mode||''}">「${esc(m.comment)}」</div>`:''}</div>
       <div class="row" style="gap:2px"><span class="k num">${Math.round(kc)}</span>
-      <button class="x" data-edit="${k}|${i}" aria-label="編輯這餐">✎</button><button class="x" data-del="${k}|${i}" aria-label="刪除這餐">×</button></div></div>`}).join('');
+      <button class="x" data-copy="${k}|${i}" aria-label="複製這餐">${ico('copy')}</button><button class="x" data-edit="${k}|${i}" aria-label="編輯這餐">✎</button><button class="x" data-del="${k}|${i}" aria-label="刪除這餐">×</button></div></div>`}).join('');
 }
 function bindMeals(root){
   root.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{
@@ -1295,6 +1297,7 @@ function bindMeals(root){
   root.querySelectorAll('[data-thumb]').forEach(b=>b.onclick=()=>{const [k,i]=b.dataset.thumb.split('|');const m=day(k).meals[+i];if(!m)return;
     openSheet(`<img class="thumb-big" src="${m.thumb}" alt="${esc(m.type)}的照片"><p class="muted" style="text-align:center">${esc(m.type)} ${esc(m.time)}　${m.items.map(x=>esc(x.name)).join('、')}</p><button class="btn" onclick="closeSheet()">關閉</button>`)});
   root.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{const [k,i]=b.dataset.edit.split('|');openEdit(k,+i)});
+  root.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{const [k,i]=b.dataset.copy.split('|');openCopy(k,+i)});
 }
 function openEdit(k,i){
   const m=day(k).meals[i]; if(!m)return;
@@ -1346,6 +1349,38 @@ function openEdit(k,i){
   draw();
 }
 
+// 讀進某天的雲端紀錄（本機還沒載入時），避免寫入時蓋掉
+async function ensureDay(date){
+  if(!(db&&uid))return;
+  const x=await db.doc(`data/users/${uid}/profile`).collection('days').doc(date).get();
+  if(x.exists){const v=JSON.parse(JSON.stringify(x.data()));const cur=local.days[date];
+    if(!cur||((cur.meals||[]).length<(v.meals||[]).length))local.days[date]=Object.assign({},v,{meals:v.meals||[],burn:v.burn||0})}
+}
+// ---------- 複製單筆紀錄 ----------
+function openCopy(k,i){
+  const m=day(k).meals[i];if(!m)return;
+  const tot=m.items.reduce((a,x)=>a+(+x.kcal||0),0);
+  openSheet(`<h2>複製這餐</h2>
+    <p class="muted">${esc(m.type)}：${m.items.map(x=>esc(x.name)).join('、')}（${Math.round(tot)} 大卡）</p>
+    <div class="row"><label class="f" style="flex:1">複製到<input type="date" id="cpDate" value="${todayKey()}" max="${todayKey()}"></label>
+    <label class="f" style="flex:1">時間<input type="time" id="cpTime" value="${new Date().toTimeString().slice(0,5)}"></label></div>
+    <label class="f">餐別<select id="cpType">${['早餐','午餐','點心','晚餐','宵夜'].map(t=>`<option ${t===(k===todayKey()?mealType():m.type)?'selected':''}>${t}</option>`).join('')}</select></label>
+    <label class="chk"><input type="checkbox" id="cpEdit"> 複製後先打開編輯，調整份量或品項</label>
+    <button class="btn fuel" id="cpGo" style="margin-top:10px">複製</button>`);
+  const $=id=>document.getElementById(id);
+  $('cpGo').onclick=async()=>{
+    const date=$('cpDate').value;if(!date||date>todayKey()){toast('不能選未來的日期');return}
+    $('cpGo').disabled=true;
+    try{await ensureDay(date)}catch(e){$('cpGo').disabled=false;toast('讀不到那天的紀錄，請檢查網路');return}
+    const nm=JSON.parse(JSON.stringify(m));delete nm.comment;delete nm.mode;
+    nm.type=$('cpType').value;nm.time=$('cpTime').value||new Date().toTimeString().slice(0,5);nm.copiedFrom=k;
+    const d=day(date);d.meals.push(nm);d.meals.sort((a,b)=>String(a.time||'').localeCompare(String(b.time||'')));
+    const idx=d.meals.indexOf(nm),edit=$('cpEdit').checked;
+    saveLocal();closeSheet();render();toast(`已複製到 ${date===todayKey()?'今天':date.slice(5).replace('-','/')}`);
+    await saveDay(date);
+    if(edit)openEdit(date,idx);
+  };
+}
 // ---------- 日曆 ----------
 let calMonth=todayKey().slice(0,7), selDate=todayKey(); const loadedMonths=new Set();
 async function loadMonth(ym){
