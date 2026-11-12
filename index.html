@@ -371,6 +371,8 @@ nav.tabs .cam svg{width:28px;height:28px}
 .ph-empty{border:0;font:inherit;color:var(--muted);line-height:1.6;cursor:pointer}
 
 /* 常用 */
+.verifying{font-size:13px;color:var(--muted);background:var(--bg);border-radius:10px;padding:8px 10px;margin:8px 0}
+.verifying .ic{width:14px;height:14px;vertical-align:-2px}
 .favrow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px}
 .favrow .chip b{margin-left:4px}
 .chip.on{background:var(--ink);color:var(--surface)}
@@ -710,9 +712,9 @@ function gate(mode,info){
     catch(e){m.textContent=errMsg(e);$('gLink').disabled=false}};
 }
 function blobToImg(blob){return new Promise((res,rej)=>{const url=URL.createObjectURL(blob);const img=new Image();
-  img.onload=()=>{const m=1280,sc=Math.min(1,m/Math.max(img.width,img.height));const c=document.createElement('canvas');
+  img.onload=()=>{const m=1024,sc=Math.min(1,m/Math.max(img.width,img.height));const c=document.createElement('canvas');
     c.width=Math.round(img.width*sc);c.height=Math.round(img.height*sc);c.getContext('2d').drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(url);
-    res({media_type:'image/jpeg',data:c.toDataURL('image/jpeg',.85).split(',')[1]})};img.onerror=rej;img.src=url})}
+    res({media_type:'image/jpeg',data:c.toDataURL('image/jpeg',.8).split(',')[1]})};img.onerror=rej;img.src=url})}
 function parseJSONText(t){t=String(t||'').replace(/```json|```/g,'').trim();
   try{return JSON.parse(t)}catch(e){}
   const i=t.search(/[\[{]/);const j=Math.max(t.lastIndexOf('}'),t.lastIndexOf(']'));
@@ -1062,6 +1064,7 @@ document.getElementById('inbodyFile').onchange=e=>{const f=e.target.files[0];e.t
 document.getElementById('photoLib').onchange=document.getElementById('photo').onchange=async e=>{
   const f=e.target.files[0]; e.target.value=''; if(!f)return;
   const blob=await shrink(f); openCapture(blob,pendingDate||todayKey());
+  if(sample&&canImages)runAI(); // 拍完直接開始辨識，不用再按一次
 };
 function shrink(file){return new Promise(res=>{const img=new Image();img.onload=()=>{const m=1024,s=Math.min(1,m/Math.max(img.width,img.height));
   const cv=document.createElement('canvas');cv.width=img.width*s;cv.height=img.height*s;cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
@@ -1099,25 +1102,30 @@ async function runAI(){
   const again=draft.items.length>0;
   if(again&&!hint){toast('先在補充說明寫要修正的地方');return}
   document.getElementById('goAI').disabled=true;
-  out.innerHTML=`<div class="thinking"><span class="dot"></span><span class="dot"></span><span class="dot"></span>${draft.blob?'正在看照片裡有什麼…':'正在估算…'}</div>`;
+  const t0=Date.now(),rid=draft.rid=draft.rid||Date.now().toString(36);
+  out.innerHTML=`<div class="thinking"><span class="dot"></span><span class="dot"></span><span class="dot"></span>${draft.blob?'正在看照片裡有什麼…':'正在估算…'} <span id="aiSec"></span></div>`;
+  const tick=setInterval(()=>{const e=document.getElementById('aiSec');if(e)e.textContent=Math.round((Date.now()-t0)/1000)+' 秒';else clearInterval(tick)},1000);
   const prompt=`你是台灣的營養師。${draft.blob?'附上的照片是使用者這一餐。辨識照片中每一樣食物與飲料，依照片判斷份量':'依使用者的描述辨識食物，用台灣常見份量估算'}，算出熱量與三大營養素。
 數值來源的優先順序（一定要照這個順序）：
 1. 商品熱量庫（下方若有提供）裡的商品 → 用庫裡的數值，source 填 "lib"。
 2. 照片裡看得到營養標示 → 直接讀標示的數字。台灣標示常寫「每一份量 X」「本包裝含 N 份」，整瓶/整包要乘上份數；只有「每100毫升/每100公克」時要乘上容量。source 填 "label"。
-3. 看得出品牌與品名的市售包裝商品、連鎖店飲品（超商、手搖飲、咖啡連鎖）→ 用該商品官方公布的營養標示數值，不要用一般同類飲品的平均值，品名要寫完整（品牌＋品名＋容量），source 填 "brand"。不確定是哪個品項時，在 note 說明。看得出品牌（杯子、包裝、店名）但商品熱量庫沒有、照片也看不到營養標示時，用網路搜尋該品牌官方公布的營養資訊；自製或看不出品牌的食物不要搜尋。
+3. 看得出品牌與品名的市售包裝商品、連鎖店飲品（超商、手搖飲、咖啡連鎖）→ 用該商品官方公布的營養標示數值，不要用一般同類飲品的平均值，品名要寫完整（品牌＋品名＋容量），source 填 "brand"。不確定是哪個品項時，在 note 說明。如果你不確定這個品牌商品的官方數值，先填最接近的估計，並把 verify 設為 true（之後會再上網確認）；自製或看不出品牌的食物 verify 一律 false。
 4. 其他自製或餐廳料理 → 依份量估算，source 填 "est"。
 ${libPromptBlock()}
 ${again?'上一次的辨識結果：'+draft.items.map(i=>`${i.name}(${i.portion||'份量未知'}) ${Math.round(+i.kcal||0)}大卡`).join('、')+'\\n請以使用者的補充說明為準，修正名稱、份量、熱量，或增減項目，再重新回傳完整清單。':''}
 ${hint?'使用者補充說明（優先採信）：'+hint:''}
-只回傳 JSON，不要其他文字：{"items":[{"name":"品名(繁體中文、台灣用語；品牌商品寫品牌＋品名)","emoji":"一個最像它的食物emoji","portion":"份量，如 1瓶 290ml/1碗/約150g","kcal":數字,"protein_g":數字,"carbs_g":數字,"fat_g":數字,"source":"lib|label|brand|est","lib":"有用到庫才填 L編號","qty":份數,"g":估計重量公克數,"base":"只有當這項是單一種基本食材（例如白飯、地瓜、香蕉、水煮蛋、燙青菜）時，填它在台灣食品營養成分資料庫的常用名稱；混合料理、加工品、飲料一律留空字串"}],"note":"一句話說明不確定的地方"}
+只回傳 JSON，不要其他文字：{"items":[{"name":"品名(繁體中文、台灣用語；品牌商品寫品牌＋品名)","emoji":"一個最像它的食物emoji","portion":"份量，如 1瓶 290ml/1碗/約150g","kcal":數字,"protein_g":數字,"carbs_g":數字,"fat_g":數字,"source":"lib|label|brand|est","lib":"有用到庫才填 L編號","qty":份數,"g":估計重量公克數,"verify":true或false,"base":"只有當這項是單一種基本食材（例如白飯、地瓜、香蕉、水煮蛋、燙青菜）時，填它在台灣食品營養成分資料庫的常用名稱；混合料理、加工品、飲料一律留空字串"}],"note":"一句話說明不確定的地方"}
 若沒有食物，items 為空陣列。`;
   try{
-    const r=await sample.json(prompt,{images:draft.blob?[draft.blob]:undefined,modelTier:'default',search:true});
-    await tfndLoad().catch(()=>{});
-    draft.items=(r.items||[]).map(i=>applyTfnd(i)).map(i=>applyLib({emoji:i.emoji||'',name:i.name,portion:i.portion||'',kcal:Math.round(+i.kcal||0),protein_g:+i.protein_g||0,carbs_g:+i.carbs_g||0,fat_g:+i.fat_g||0,src:['label','brand','est','tfnd'].includes(i.source)?i.source:'est'},i));
+    const [r]=await Promise.all([sample.json(prompt,{images:draft.blob?[draft.blob]:undefined,modelTier:'default'}),tfndLoad().catch(()=>{})]);
+    clearInterval(tick);
+    if(draft.rid!==rid)return;
+    draft.items=(r.items||[]).map(i=>applyTfnd(i)).map(i=>applyLib({emoji:i.emoji||'',name:i.name,portion:i.portion||'',kcal:Math.round(+i.kcal||0),protein_g:+i.protein_g||0,carbs_g:+i.carbs_g||0,fat_g:+i.fat_g||0,src:['label','brand','est','tfnd'].includes(i.source)?i.source:'est',verify:!!i.verify},i));
     if(!draft.items.length){out.innerHTML='<p class="tip">照片裡看不出食物。換個角度再拍，或改用打字描述。</p>';document.getElementById('goAI').disabled=false;return}
     draft.note=r.note||''; showItems(draft.note); if(again)toast('已依補充說明重新辨識');
+    verifyBrands(draft);
   }catch(e){
+    clearInterval(tick);
     const msg=e.code==='not_granted'?'需要允許使用 Claude 才能辨識。也可以按「自己輸入」。':e.code==='rate_limited'?'用得太頻繁了，稍等一下再試。':'沒辨識成功：'+esc(errMsg(e))+'<br>再試一次，或按「自己輸入」。';
     if(draft.items.length){showItems(draft.note||'');toast(msg)}
     else{out.innerHTML=`<p class="tip">${msg}</p>`;document.getElementById('goAI').disabled=false}
@@ -1136,6 +1144,7 @@ function showItems(note){
    <input type="number" inputmode="numeric" data-k="${k}" value="${i.kcal}" aria-label="${esc(i.name)} 熱量">
    <button class="x star ${isFav(i.name)?'on':''}" data-star="${k}" aria-pressed="${isFav(i.name)}" aria-label="${isFav(i.name)?'從常用移除':'加入常用'}">${isFav(i.name)?'★':'☆'}</button>
    <button class="x" data-rm="${k}" aria-label="移除">×</button></div>`}).join('')}
+   ${draft.items.some(i=>i.verify&&!i.verified&&i.src!=='lib'&&i.src!=='label')?`<p class="verifying">${ico('search')} 正在上網確認品牌熱量：${draft.items.filter(i=>i.verify&&!i.verified&&i.src!=='lib'&&i.src!=='label').map(i=>esc(i.name)).join('、')}。不用等，可以先記錄，確認後會自動更新。</p>`:''}
    <div class="minirow"><span>這餐合計</span><b class="num" id="tot">${Math.round(tot())} 大卡</b></div>
    ${note?`<p class="muted">${esc(note)}</p>`:''}
    <p class="muted">數字可以直接改。點 ☆ 加入你的常用項目，之後一鍵帶入。🏷️ 營養標示、🏪 品牌公布值、🔖 條碼查到的商品會自動存進共用商品庫。</p>
@@ -1165,6 +1174,7 @@ function saveMeal(){
     const n=v=>Math.round((+v||0)*10)/10;
     meal={type:String(draft.type||mealType()),time:new Date().toTimeString().slice(0,5),
       items:items.map(i=>({name:String(i.name||'食物').trim()||'食物',portion:String(i.portion||''),kcal:Math.round(+i.kcal||0),protein_g:n(i.protein_g),carbs_g:n(i.carbs_g),fat_g:n(i.fat_g),emoji:String(i.emoji||'')}))};
+    if(draft.rid)meal.rid=draft.rid;
     if(draft.thumb)meal.thumb=draft.thumb;
     k=meal.items.reduce((a,i)=>a+i.kcal,0);
     step='寫入紀錄'; d.meals.push(meal); saveLocal();
@@ -1679,6 +1689,31 @@ function openWater(k){
 
 
 
+
+// ---------- 背景上網確認品牌熱量（不擋住畫面）----------
+async function verifyBrands(d){
+  const list=d.items.filter(i=>i.verify&&!i.verified&&i.src!=='lib'&&i.src!=='label');
+  if(!list.length||!sample)return;
+  const rid=d.rid,date=d.date;
+  try{
+    const r=await sample.json(`上網搜尋下列台灣市售商品／連鎖店品項的官方營養資訊（熱量、蛋白質、碳水、脂肪），依括號內的份量換算。
+${list.map((i,k)=>`${k+1}. ${i.name}（${i.portion||'1份'}）`).join('\n')}
+只回傳 JSON：{"items":[{"n":編號,"found":true或false,"name":"官方完整品名","portion":"份量","kcal":數字,"protein_g":數字,"carbs_g":數字,"fat_g":數字}]}。找不到可信的官方資料就 found:false，不要猜。`,{modelTier:'default',search:true});
+    const res=(r.items||[]).filter(x=>x.found&&+x.kcal>0);
+    let n=0;
+    const fix=(it,x)=>{Object.assign(it,{kcal:Math.round(+x.kcal),protein_g:+x.protein_g||0,carbs_g:+x.carbs_g||0,fat_g:+x.fat_g||0,src:'brand',verified:true,verifiedOk:true});if(x.portion)it.portion=String(x.portion);n++};
+    list.forEach(i=>i.verified=true);
+    // 還在記錄畫面：直接更新
+    if(draft&&draft.rid===rid&&document.getElementById('capOut')&&document.getElementById('saveMeal')){
+      res.forEach(x=>{const it=list[(+x.n||0)-1];if(it)fix(it,x)});
+      showItems(draft.note||'');if(n)toast(`已上網確認 ${n} 項品牌熱量`);return;
+    }
+    // 已經記錄了：更新那一餐
+    const meal=(day(date).meals||[]).find(m=>m.rid===rid);if(!meal)return;
+    res.forEach(x=>{const src=list[(+x.n||0)-1];if(!src)return;const it=meal.items.find(y=>y.name===src.name);if(it){fix(it,x);delete it.src;delete it.verified}});
+    if(n){saveLocal();render();toast(`已上網確認，更新了 ${n} 項的熱量`);await saveDay(date);autoLearn(res.map(x=>{const s=list[(+x.n||0)-1];return s&&Object.assign({},s,{src:'brand',verify:false,kcal:Math.round(+x.kcal),protein_g:+x.protein_g||0,carbs_g:+x.carbs_g||0,fat_g:+x.fat_g||0})}).filter(Boolean))}
+  }catch(e){list.forEach(i=>i.verified=true);if(draft&&draft.rid===rid&&document.getElementById('saveMeal'))showItems(draft.note||'')}
+}
 // ---------- 從商品庫選（記錄一餐時）----------
 function libItem(f,q){const r=v=>Math.round((+v||0)*q*10)/10;
   return{name:f.name,portion:(q!==1?q+' × ':'')+(f.portion||'1份'),kcal:Math.round(f.kcal*q),protein_g:r(f.protein_g),carbs_g:r(f.carbs_g),fat_g:r(f.fat_g),emoji:'',src:'lib',libId:f.id,qty:q}}
@@ -2212,7 +2247,7 @@ async function lookupBarcode(code,date){
 }
 // 自動學習：營養標示、品牌官方公布值、條碼資料庫查到的數字，記錄時自動存進共用商品庫
 async function autoLearn(items,barcode){
-  const ok=items.filter(i=>['label','brand','off'].includes(i.src)&&!i.libId&&(i.name||'').trim()&&+i.kcal>0&&!findFood(i.name));
+  const ok=items.filter(i=>['label','brand','off'].includes(i.src)&&!(i.verify&&!i.verifiedOk)&&!i.libId&&(i.name||'').trim()&&+i.kcal>0&&!findFood(i.name));
   if(barcode&&ok.length===1&&!ok[0].barcode)ok[0].barcode=barcode;
   let n=0;for(const it of ok){if(await saveToLib(Object.assign({},it),true))n++}
   if(n)setTimeout(()=>toast(`已把 ${n} 個商品的熱量存進商品庫，下次會直接用`),2600);
